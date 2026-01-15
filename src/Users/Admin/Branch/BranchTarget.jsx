@@ -10,9 +10,11 @@ import {
 export default function BranchTarget() {
   const dispatch = useDispatch();
   const { items: branches, loading, error } = useSelector((state) => state.branch);
-  const [selectedBranchId, setSelectedBranchId] = useState("");
+  const [targetSelection, setTargetSelection] = useState("");
   const [targets, setTargets] = useState({ loanTarget: "", disbursementTarget: "" });
   const [saving, setSaving] = useState(false);
+
+  const scope = targetSelection === "all" ? "all" : "single";
 
   useEffect(() => {
     if (!branches.length) {
@@ -27,19 +29,31 @@ export default function BranchTarget() {
     }
   }, [error, dispatch]);
 
-  const selectedBranch = useMemo(
-    () => branches.find((branch) => branch._id === selectedBranchId),
-    [branches, selectedBranchId]
-  );
+  const selectedBranch = useMemo(() => {
+    if (scope !== "single") {
+      return null;
+    }
+
+    return branches.find((branch) => branch._id === targetSelection) || null;
+  }, [branches, scope, targetSelection]);
 
   useEffect(() => {
-    if (selectedBranch) {
+    if (scope === "single" && selectedBranch) {
       setTargets({
         loanTarget: selectedBranch.loanTarget ?? 0,
         disbursementTarget: selectedBranch.disbursementTarget ?? 0,
       });
+      return;
     }
-  }, [selectedBranch]);
+
+    if (scope === "all") {
+      setTargets({ loanTarget: "", disbursementTarget: "" });
+    }
+  }, [scope, selectedBranch]);
+
+  const handleTargetSelectionChange = (event) => {
+    setTargetSelection(event.target.value);
+  };
 
   const handleTargetChange = (field) => (event) => {
     setTargets((prev) => ({
@@ -49,30 +63,40 @@ export default function BranchTarget() {
   };
 
   const resetTargets = () => {
-    if (!selectedBranch) return;
-    setTargets({
-      loanTarget: selectedBranch.loanTarget ?? 0,
-      disbursementTarget: selectedBranch.disbursementTarget ?? 0,
-    });
+    if (scope === "single" && selectedBranch) {
+      setTargets({
+        loanTarget: selectedBranch.loanTarget ?? 0,
+        disbursementTarget: selectedBranch.disbursementTarget ?? 0,
+      });
+      return;
+    }
+
+    setTargets({ loanTarget: "", disbursementTarget: "" });
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (!selectedBranchId) {
+    const isSingleScope = scope === "single";
+
+    if (isSingleScope && !targetSelection) {
       toast.error("Select a branch first");
       return;
     }
 
-    const loanTargetNumber = Number(targets.loanTarget);
-    const disbursementTargetNumber = Number(targets.disbursementTarget);
+    const loanTargetNumber = targets.loanTarget === "" ? null : Number(targets.loanTarget);
+    const disbursementTargetNumber =
+      targets.disbursementTarget === "" ? null : Number(targets.disbursementTarget);
 
     if (
-      Number.isNaN(loanTargetNumber) ||
-      Number.isNaN(disbursementTargetNumber) ||
-      targets.loanTarget === "" ||
-      targets.disbursementTarget === ""
+      (loanTargetNumber !== null && Number.isNaN(loanTargetNumber)) ||
+      (disbursementTargetNumber !== null && Number.isNaN(disbursementTargetNumber))
     ) {
       toast.error("Provide valid numeric targets");
+      return;
+    }
+
+    if (loanTargetNumber === null && disbursementTargetNumber === null) {
+      toast.error("Provide at least one target value");
       return;
     }
 
@@ -80,9 +104,12 @@ export default function BranchTarget() {
     try {
       await dispatch(
         updateBranchTargets({
-          id: selectedBranchId,
-          loanTarget: loanTargetNumber,
-          disbursementTarget: disbursementTargetNumber,
+          scope,
+          branchId: isSingleScope ? targetSelection : undefined,
+          loanTarget: Number.isFinite(loanTargetNumber) ? loanTargetNumber : undefined,
+          disbursementTarget: Number.isFinite(disbursementTargetNumber)
+            ? disbursementTargetNumber
+            : undefined,
         })
       ).unwrap();
       toast.success("Branch targets updated");
@@ -113,19 +140,20 @@ export default function BranchTarget() {
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="branch">
-                  Branch
+                <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="targetScope">
+                  Apply Targets To
                 </label>
                 <select
-                  id="branch"
-                  value={selectedBranchId}
-                  onChange={(event) => setSelectedBranchId(event.target.value)}
+                  id="targetScope"
+                  value={targetSelection}
+                  onChange={handleTargetSelectionChange}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
                   required
                 >
                   <option value="" disabled>
-                    Select a branch
+                    Select branch or choose all
                   </option>
+                  <option value="all">All Branches</option>
                   {branches.map((branch) => (
                     <option key={branch._id} value={branch._id}>
                       {branch.name}
@@ -147,7 +175,7 @@ export default function BranchTarget() {
                   placeholder="e.g. 2500000"
                   min="0"
                   step="0.01"
-                  disabled={!selectedBranchId}
+                  disabled={scope === "single" && !targetSelection}
                 />
               </div>
 
@@ -164,7 +192,7 @@ export default function BranchTarget() {
                   placeholder="e.g. 1500000"
                   min="0"
                   step="0.01"
-                  disabled={!selectedBranchId}
+                  disabled={scope === "single" && !targetSelection}
                 />
               </div>
             </div>
@@ -174,14 +202,14 @@ export default function BranchTarget() {
                 type="button"
                 className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
                 onClick={resetTargets}
-                disabled={!selectedBranchId}
+                disabled={scope === "single" && !targetSelection}
               >
                 Reset
               </button>
               <button
                 type="submit"
                 className="inline-flex items-center rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={!selectedBranchId || saving || loading}
+                disabled={(scope === "single" && !targetSelection) || saving || loading}
               >
                 {saving ? "Saving..." : "Save Targets"}
               </button>

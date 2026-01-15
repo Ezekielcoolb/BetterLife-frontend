@@ -77,20 +77,51 @@ export const addBusinessDays = (startDate, businessDays) => {
   return date;
 };
 
-export const countBusinessDays = (startDate, endDate) => {
+export const isHoliday = (date, holidays = []) => {
+  if (!date || !Array.isArray(holidays)) return false;
+
+  const d = new Date(date);
+  const monthDay = `${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    d.getUTCDate()
+  ).padStart(2, "0")}`;
+
+  return holidays.some((h) => {
+    if (h.isRecurring) {
+      const hMonth = String(new Date(h.holiday).getUTCMonth() + 1).padStart(
+        2,
+        "0"
+      );
+      const hDay = String(new Date(h.holiday).getUTCDate()).padStart(2, "0");
+      return `${hMonth}-${hDay}` === monthDay;
+    }
+    const hDate = new Date(h.holiday);
+    return (
+      hDate.getUTCFullYear() === d.getUTCFullYear() &&
+      hDate.getUTCMonth() === d.getUTCMonth() &&
+      hDate.getUTCDate() === d.getUTCDate()
+    );
+  });
+};
+
+export const countBusinessDays = (startDate, endDate, holidays = []) => {
   if (!(startDate instanceof Date) || !(endDate instanceof Date)) {
     return 0;
   }
 
-  if (startDate > endDate) {
+  const s = new Date(startDate);
+  s.setHours(0, 0, 0, 0);
+  const e = new Date(endDate);
+  e.setHours(0, 0, 0, 0);
+
+  if (s > e) {
     return 0;
   }
 
   let days = 0;
-  const cursor = new Date(startDate);
+  const cursor = new Date(s);
 
-  while (cursor <= endDate) {
-    if (!isWeekend(cursor)) {
+  while (cursor <= e) {
+    if (!isWeekend(cursor) && !isHoliday(cursor, holidays)) {
       days += 1;
     }
     cursor.setDate(cursor.getDate() + 1);
@@ -99,7 +130,7 @@ export const countBusinessDays = (startDate, endDate) => {
   return days;
 };
 
-export const computeLoanMetrics = (loan) => {
+export const computeLoanMetrics = (loan, holidays = []) => {
   if (!loan) {
     return {
       disbursedAt: null,
@@ -116,23 +147,41 @@ export const computeLoanMetrics = (loan) => {
   }
 
   const disbursedAt = toDateOrNull(loan.disbursedAt);
-  const amountDisbursed = loan?.loanDetails?.amountDisbursed ?? 0;
-  const amountToBePaid = loan?.loanDetails?.amountToBePaid ?? 0;
-  const amountPaidSoFar = loan?.loanDetails?.amountPaidSoFar ?? 0;
-  const dailyAmount = loan?.loanDetails?.dailyAmount ?? 0;
+  const amountDisbursed = Number(loan?.loanDetails?.amountDisbursed || 0);
+  const amountToBePaid = Number(loan?.loanDetails?.amountToBePaid || 0);
+  const amountPaidSoFar = Number(loan?.loanDetails?.amountPaidSoFar || 0);
+  const dailyAmount = Number(loan?.loanDetails?.dailyAmount || 0);
 
-  const projectedEndDate = disbursedAt ? addBusinessDays(disbursedAt, DAILY_INSTALLMENT_COUNT) : null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  const businessDaysSinceDisbursement = disbursedAt
-    ? Math.max(countBusinessDays(addDays(disbursedAt, 1), new Date()), 0)
+  const normalizedDisbursedAt = disbursedAt ? new Date(disbursedAt) : null;
+  if (normalizedDisbursedAt) {
+    normalizedDisbursedAt.setHours(0, 0, 0, 0);
+  }
+
+  const projectedEndDate = normalizedDisbursedAt
+    ? addBusinessDays(normalizedDisbursedAt, DAILY_INSTALLMENT_COUNT)
+    : null;
+
+  const businessDaysSinceDisbursement = normalizedDisbursedAt
+    ? Math.max(
+        countBusinessDays(addDays(normalizedDisbursedAt, 1), today, holidays),
+        0
+      )
     : 0;
 
   const expectedRepaymentsByNow = dailyAmount * businessDaysSinceDisbursement;
-  const outstandingDue = Math.max(expectedRepaymentsByNow - amountPaidSoFar, 0);
+  const shouldClearOutstandingBalance =
+    businessDaysSinceDisbursement >= DAILY_INSTALLMENT_COUNT;
+
+  const outstandingDue = shouldClearOutstandingBalance
+    ? Math.max(amountToBePaid - amountPaidSoFar, 0)
+    : Math.max(expectedRepaymentsByNow - amountPaidSoFar, 0);
   const balanceRemaining = Math.max(amountToBePaid - amountPaidSoFar, 0);
 
   return {
-    disbursedAt,
+    disbursedAt: normalizedDisbursedAt,
     projectedEndDate,
     amountDisbursed,
     amountToBePaid,
@@ -140,7 +189,7 @@ export const computeLoanMetrics = (loan) => {
     dailyAmount,
     businessDaysSinceDisbursement,
     expectedRepaymentsByNow,
-    outstandingDue,
-    balanceRemaining,
+    outstandingDue: Number(outstandingDue.toFixed(2)),
+    balanceRemaining: Number(balanceRemaining.toFixed(2)),
   };
 };

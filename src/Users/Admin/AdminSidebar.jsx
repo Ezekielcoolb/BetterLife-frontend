@@ -38,16 +38,24 @@ const primaryNav = [
     to: "/admin/loans",
     icon: FileText,
   },
+   {
+    label: "Disbursements",
+    to: "/admin/disbursements",
+    icon: CheckCircle2,
+  },
   {
     label: "Customers",
     to: "/admin/customers",
     icon: Users,
   },
+ 
   {
-    label: "Disbursements",
-    to: "/admin/disbursements",
+    label: "Transactions",
+    to: "/admin/transactions",
     icon: CheckCircle2,
   },
+
+  
   {
     label: "Branch",
     to: "/admin/branch",
@@ -62,6 +70,24 @@ const primaryNav = [
     label: "Admin Panels",
     to: "/admin/admins",
     icon: Users,
+  },
+];
+
+const reportsNav = [
+  {
+    label: "CSO Report",
+    to: "/admin/reports/cso",
+    icon: FileText,
+  },
+  {
+    label: "Business Report",
+    to: "/admin/reports/business",
+    icon: Briefcase,
+  },
+  {
+    label: "Monthly Report",
+    to: "/admin/reports/monthly",
+    icon: CalendarDays,
   },
 ];
 
@@ -84,11 +110,11 @@ const operationsNav = [
 ];
 
 const secondaryNav = [
-  {
-    label: "Support",
-    to: "/admin/support",
-    icon: LifeBuoy,
-  },
+  // {
+  //   label: "Support",
+  //   to: "/admin/support",
+  //   icon: LifeBuoy,
+  // },
   {
     label: "Settings",
     to: "/admin/settings",
@@ -130,6 +156,7 @@ function SidebarSection({ title, items, onNavigate }) {
 
 export default function AdminSidebar({ isOpen = false, onClose }) {
   const [operationsOpen, setOperationsOpen] = useState(false);
+  const [reportsOpen, setReportsOpen] = useState(false);
 
   return (
     <>
@@ -210,7 +237,47 @@ export default function AdminSidebar({ isOpen = false, onClose }) {
               )}
             </div>
 
-            <SidebarSection title="Workspace" items={secondaryNav} onNavigate={onClose} />
+            <div className="space-y-1">
+              <button
+                type="button"
+                onClick={() => setReportsOpen((prev) => !prev)}
+                className="flex w-full items-center justify-between rounded-lg px-3 text-left text-sm font-semibold text-slate-600 transition hover:text-slate-900"
+              >
+                <span className="flex items-center gap-3">
+                  <FileText className="h-5 w-5" />
+                  <span>Reports</span>
+                </span>
+                {reportsOpen ? (
+                  <ChevronDown className="h-4 w-4 text-slate-400" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-slate-400" />
+                )}
+              </button>
+
+              {reportsOpen && (
+                <nav className="ml-8 space-y-1">
+                  {reportsNav.map(({ label, to, icon: Icon }) => (
+                    <NavLink
+                      key={label}
+                      to={to}
+                      end
+                      className={({ isActive }) =>
+                        [
+                          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                          isActive ? linkActiveClasses : linkInactiveClasses,
+                        ].join(" ")
+                      }
+                      onClick={onClose}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span>{label}</span>
+                    </NavLink>
+                  ))}
+                </nav>
+              )}
+            </div>
+
+            <SidebarSection title="" items={secondaryNav} onNavigate={onClose} />
           </div>
 
           <div className="border-t border-slate-200 px-4 py-5">

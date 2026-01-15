@@ -196,7 +196,7 @@ export default function CsoLoans() {
               <TrendingUp className="h-5 w-5 text-blue-600" />
             </div>
             <div>
-              <p className="text-xs font-medium text-slate-500">Payments This Month</p>
+              <p className="text-xs font-medium text-slate-500">Repayments This Month</p>
               <p className="text-xl font-bold text-slate-900">{formatCurrency(summary.totalPayments)}</p>
             </div>
           </div>
@@ -242,7 +242,7 @@ export default function CsoLoans() {
                   <th className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">No. of Loans</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">Total Disbursed</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">Principal + Interest</th>
-                  <th className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">Payments Made</th>
+                  <th className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">Actual Paid</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">Loan Balance</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">Admin Fee</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">Loan Target</th>
@@ -266,7 +266,7 @@ export default function CsoLoans() {
                       <td className="px-4 py-4 text-right font-mono text-slate-600">{formatCurrency(cso.amountToBePaid)}</td>
                       <td className="px-4 py-4 text-right font-mono text-emerald-600">{formatCurrency(cso.paymentsThisMonth)}</td>
                       <td className="px-4 py-4 text-right font-mono text-rose-600">{formatCurrency(cso.loanBalance)}</td>
-                      <td className="px-4 py-4 text-right font-mono text-slate-600">{formatCurrency(cso.formAmount)}</td>
+                      <td className="px-4 py-4 text-right font-mono text-slate-600">{formatCurrency(cso.loanAppForm)}</td>
                       <td className="px-4 py-4 text-right font-mono text-slate-600">{cso.loanTarget}</td>
                       <td className="px-4 py-4 text-right font-mono text-slate-600">{formatCurrency(cso.disbursementTarget)}</td>
                       <td className="px-4 py-4 text-center">

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
 import {
@@ -21,6 +22,7 @@ const emptyBranchForm = {
 
 export default function Branch() {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { items: branches, loading, error } = useSelector((state) => state.branch);
   const [branchForm, setBranchForm] = useState(emptyBranchForm);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -154,14 +156,23 @@ export default function Branch() {
                       <span className="font-semibold text-slate-800">{formatTarget(branch.disbursementTarget)}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700"
-                        onClick={() => handleDelete(branch._id)}
-                        disabled={loading}
-                      >
-                        Delete
-                      </button>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-indigo-500 hover:text-indigo-600"
+                          onClick={() => navigate(`/admin/branch/${branch._id}`)}
+                        >
+                          View Details
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700"
+                          onClick={() => handleDelete(branch._id)}
+                          disabled={loading}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

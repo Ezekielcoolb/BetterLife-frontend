@@ -12,6 +12,8 @@ export default function CsoLogin() {
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
   const [isResetMode, setIsResetMode] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
   const { token, loading, resettingPassword, error } = useSelector((state) => state.csoAuth);
 
   useEffect(() => {
@@ -97,17 +99,99 @@ export default function CsoLogin() {
             <label htmlFor={isResetMode ? "newPassword" : "password"} className="text-sm font-medium text-slate-700">
               {isResetMode ? "New password" : "Password"}
             </label>
-            <input
-              id={isResetMode ? "newPassword" : "password"}
-              type="password"
-              value={isResetMode ? resetPassword : password}
-              onChange={(event) =>
-                isResetMode ? setResetPassword(event.target.value) : setPassword(event.target.value)
-              }
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-              placeholder={isResetMode ? "Enter a new password" : "Enter your password"}
-              autoComplete={isResetMode ? "new-password" : "current-password"}
-            />
+            <div className="relative">
+              <input
+                id={isResetMode ? "newPassword" : "password"}
+                type={isResetMode ? (showResetPassword ? "text" : "password") : showPassword ? "text" : "password"}
+                value={isResetMode ? resetPassword : password}
+                onChange={(event) =>
+                  isResetMode ? setResetPassword(event.target.value) : setPassword(event.target.value)
+                }
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 pr-10 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                placeholder={isResetMode ? "Enter a new password" : "Enter your password"}
+                autoComplete={isResetMode ? "new-password" : "current-password"}
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  isResetMode
+                    ? setShowResetPassword((prev) => !prev)
+                    : setShowPassword((prev) => !prev)
+                }
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-indigo-500 hover:text-indigo-600"
+                aria-label={
+                  isResetMode
+                    ? showResetPassword
+                      ? "Hide new password"
+                      : "Show new password"
+                    : showPassword
+                    ? "Hide password"
+                    : "Show password"
+                }
+              >
+                {isResetMode ? (
+                  showResetPassword ? (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-5 w-5"
+                    >
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-5 0-9-4-9-8a9.99 9.99 0 0 1 4.9-7.94" />
+                      <path d="M1 1l22 22" />
+                      <path d="M9.53 9.53A3.5 3.5 0 0 0 12 15.5c.87 0 1.67-.31 2.28-.82" />
+                    </svg>
+                  ) : (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-5 w-5"
+                    >
+                      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )
+                ) : showPassword ? (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-5 w-5"
+                  >
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-5 0-9-4-9-8a9.99 9.99 0 0 1 4.9-7.94" />
+                    <path d="M1 1l22 22" />
+                    <path d="M9.53 9.53A3.5 3.5 0 0 0 12 15.5c.87 0 1.67-.31 2.28-.82" />
+                  </svg>
+                ) : (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-5 w-5"
+                  >
+                    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                )}
+              </button>
+            </div>
           </div>
 
           {displayError && <p className="text-sm text-rose-600">{displayError}</p>}

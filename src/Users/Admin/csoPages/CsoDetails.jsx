@@ -11,9 +11,11 @@ import {
   resolveCsoRemittance,
 } from "../../../redux/slices/csoSlice";
 import { fetchBranches } from "../../../redux/slices/branchSlice";
-import { ChevronLeft, ChevronRight, CheckCircle, AlertCircle, X, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle, AlertCircle, X, ExternalLink, Loader2 } from "lucide-react";
 import CsoLoansTab from "./CsoLoansTab";
 import CsoCustomersTab from "./CsoCustomersTab";
+import CsoCollectionTab from "./CsoCollectionTab";
+import CsoDashboardTab from "./CsoDashboardTab";
 
 const editableFields = [
   "firstName",
@@ -57,6 +59,7 @@ export default function CsoDetails() {
     selected,
     detailLoading,
     saving,
+    resolvingRemittance,
     error,
   } = useSelector((state) => state.cso);
   const { items: branches } = useSelector((state) => state.branch);
@@ -271,8 +274,19 @@ export default function CsoDetails() {
                             onChange={(e) => setResolveData({...resolveData, message: e.target.value})}
                         ></textarea>
                     </div>
-                    <button type="submit" className="w-full rounded-xl bg-indigo-600 py-2.5 font-semibold text-white hover:bg-indigo-700">
-                        Submit Resolution
+                    <button
+                        type="submit"
+                        disabled={resolvingRemittance}
+                        className="w-full rounded-xl bg-indigo-600 py-2.5 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-400"
+                    >
+                        {resolvingRemittance ? (
+                            <span className="flex items-center justify-center gap-2">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Submitting...
+                            </span>
+                        ) : (
+                            "Submit Resolution"
+                        )}
                     </button>
                 </form>
             </div>
@@ -342,6 +356,26 @@ export default function CsoDetails() {
                 }`}
             >
                 Remittance Records
+            </button>
+            <button
+                onClick={() => setActiveTab("dashboard")}
+                className={`border-b-2 py-4 text-sm font-medium ${
+                    activeTab === "dashboard"
+                        ? "border-indigo-500 text-indigo-600"
+                        : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700"
+                }`}
+            >
+                Dashboard
+            </button>
+            <button
+                onClick={() => setActiveTab("collections")}
+                className={`border-b-2 py-4 text-sm font-medium ${
+                    activeTab === "collections"
+                        ? "border-indigo-500 text-indigo-600"
+                        : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700"
+                }`}
+            >
+                Collections
             </button>
             <button
                 onClick={() => setActiveTab("loans")}
@@ -731,6 +765,10 @@ export default function CsoDetails() {
                 </form>
             </section>
           </>
+      ) : activeTab === "dashboard" ? (
+          <CsoDashboardTab csoId={id} />
+      ) : activeTab === "collections" ? (
+          <CsoCollectionTab csoId={id} />
       ) : activeTab === "loans" ? (
           <CsoLoansTab csoId={id} />
       ) : activeTab === "customers" ? (

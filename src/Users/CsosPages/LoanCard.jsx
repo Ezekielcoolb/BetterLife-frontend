@@ -6,6 +6,7 @@ const STATUS_COLORS = {
   paidFuture: "bg-sky-500",
   partial: "bg-amber-500",
   late: "bg-rose-500",
+  holiday: "bg-indigo-500",
 };
 
 const LEGEND = [
@@ -13,6 +14,7 @@ const LEGEND = [
   { label: "Full payment ahead", color: STATUS_COLORS.paidFuture },
   { label: "Partial payment", color: STATUS_COLORS.partial },
   { label: "Defaulting", color: STATUS_COLORS.late },
+  { label: "Holiday (no collection)", color: STATUS_COLORS.holiday },
 ];
 
 function formatDateLabel(value) {
@@ -65,6 +67,8 @@ function getStatusBadgeClass(status) {
       return "border border-amber-400/40 bg-amber-400/15 text-amber-200";
     case "pending":
       return "border border-rose-400/40 bg-rose-500/15 text-rose-200";
+    case "holiday":
+      return "border border-indigo-400/40 bg-indigo-500/15 text-indigo-200";
     default:
       return "border border-slate-500/40 bg-slate-600/20 text-slate-100";
   }
@@ -93,12 +97,17 @@ function useScheduleEntries(schedule = [], dailyAmount = 0) {
           colorClass = STATUS_COLORS.partial;
         } else if (status === "pending" && hasElapsed) {
           colorClass = STATUS_COLORS.late;
+        } else if (status === "holiday") {
+          colorClass = STATUS_COLORS.holiday;
         }
 
         const amountPaid = Number(entry?.amountPaid ?? 0);
         let amountDue = 0;
 
-        if (status === "paid") {
+        if (status === "holiday") {
+          // no payment is due or recorded on holidays
+          amountDue = 0;
+        } else if (status === "paid") {
           amountDue = Math.max(dailyAmount - amountPaid, 0);
         } else if (status === "partial" && hasElapsed) {
           amountDue = Math.max(dailyAmount - amountPaid, 0);
@@ -115,6 +124,7 @@ function useScheduleEntries(schedule = [], dailyAmount = 0) {
           amountPaid,
           amountDue,
           statusLabel: formatStatusLabel(status),
+          holidayReason: entry?.holidayReason,
         };
       })
       .filter(Boolean);
@@ -282,6 +292,15 @@ export default function LoanCard({ loan }) {
                   Status: {selectedEntry.statusLabel}
                 </span>
               </div>
+
+              {selectedEntry.status === "holiday" && (
+                <div className="rounded-2xl border border-indigo-400/40 bg-indigo-500/10 px-3 py-3 text-xs text-indigo-100">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-200">Holiday notice</p>
+                  <p className="mt-1 text-sm leading-relaxed text-indigo-100">
+                    {selectedEntry.holidayReason || "Repayment is paused for this holiday."}
+                  </p>
+                </div>
+              )}
 
               <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
                 <div>

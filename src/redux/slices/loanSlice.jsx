@@ -6,6 +6,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000
 
 const initialState = {
   loans: [],
+  loansPagination: { page: 1, limit: 16, total: 0, totalPages: 1 },
   loading: false,
   submitting: false,
   error: null,
@@ -33,10 +34,30 @@ const initialState = {
   formCollectionRecords: [],
   formCollectionSummary: {
     totalCustomers: 0,
-    totalFormAmount: 0,
+    totalLoanAppForm: 0,
   },
   formCollectionLoading: false,
   formCollectionError: null,
+  outstandingLoans: [],
+  totalOutstanding: 0,
+  outstandingLoading: false,
+  outstandingError: null,
+  categoryCounts: {
+    all: 0,
+    active: 0,
+    defaults: 0,
+    overdue: 0,
+    recovery: 0,
+    paid: 0,
+    pending: 0,
+    rejected: 0,
+  },
+  categoryCountsLoading: false,
+  categoryCountsError: null,
+  currentCategoryTotalBalance: 0,
+  dashboardStats: null,
+  dashboardStatsLoading: false,
+  dashboardStatsError: null,
 };
 
 const extractErrorMessage = (error, fallback) => {
@@ -45,7 +66,10 @@ const extractErrorMessage = (error, fallback) => {
 
 export const fetchCsoLoans = createAsyncThunk(
   "loan/fetchCsoLoans",
-  async (_, { getState, rejectWithValue }) => {
+  async (
+    { page = 1, limit = 16, search = "", groupId = "", category = "all" } = {},
+    { getState, rejectWithValue }
+  ) => {
     const state = getState();
     const token = state.csoAuth?.token || getStoredCsoAuth().token;
 
@@ -55,7 +79,15 @@ export const fetchCsoLoans = createAsyncThunk(
 
     try {
       axios.defaults.headers.common.Authorization = `Bearer ${token}`;
-      const response = await axios.get(`${API_BASE_URL}/api/loans/me`);
+      const response = await axios.get(`${API_BASE_URL}/api/loans/me`, {
+        params: {
+          page,
+          limit,
+          search: search || undefined,
+          groupId: groupId || undefined,
+          category: category !== "all" ? category : undefined,
+        },
+      });
       return response.data;
     } catch (error) {
       if (error.response?.status === 401) {
@@ -65,6 +97,32 @@ export const fetchCsoLoans = createAsyncThunk(
       }
 
       return rejectWithValue(extractErrorMessage(error, "Unable to fetch loans"));
+    }
+  }
+);
+
+export const submitLoanEdit = createAsyncThunk(
+  "loan/submitLoanEdit",
+  async ({ loanId, data }, { getState, rejectWithValue }) => {
+    const state = getState();
+    const token = state.csoAuth?.token || getStoredCsoAuth().token;
+
+    if (!token) {
+      return rejectWithValue("Unauthorized");
+    }
+
+    try {
+      axios.defaults.headers.common.Authorization = `Bearer ${token}`;
+      const response = await axios.patch(`${API_BASE_URL}/api/loans/${loanId}/cso-edit`, data);
+      return response.data;
+    } catch (error) {
+      if (error.response?.status === 401) {
+        clearCsoAuth();
+        delete axios.defaults.headers.common.Authorization;
+        return rejectWithValue("Unauthorized");
+      }
+
+      return rejectWithValue(extractErrorMessage(error, "Unable to submit edited loan"));
     }
   }
 );
@@ -91,6 +149,29 @@ export const syncLoanRepaymentSchedule = createAsyncThunk(
       }
 
       return rejectWithValue(extractErrorMessage(error, "Unable to synchronize repayment schedule"));
+    }
+  }
+);
+
+export const fetchCsoLoanCounts = createAsyncThunk(
+  "loan/fetchCsoLoanCounts",
+  async (_, { getState, rejectWithValue }) => {
+    const state = getState();
+    const token = state.csoAuth?.token || getStoredCsoAuth().token;
+
+    if (!token) return rejectWithValue("Unauthorized");
+
+    try {
+      axios.defaults.headers.common.Authorization = `Bearer ${token}`;
+      const response = await axios.get(`${API_BASE_URL}/api/csos/loans/counts`);
+      return response.data;
+    } catch (error) {
+      if (error.response?.status === 401) {
+        clearCsoAuth();
+        delete axios.defaults.headers.common.Authorization;
+        return rejectWithValue("Unauthorized");
+      }
+      return rejectWithValue(extractErrorMessage(error, "Unable to fetch loan counts"));
     }
   }
 );
@@ -272,6 +353,57 @@ export const fetchCsoFormCollection = createAsyncThunk(
   }
 );
 
+export const fetchCsoOutstandingLoans = createAsyncThunk(
+  "loan/fetchCsoOutstandingLoans",
+  async (_, { getState, rejectWithValue }) => {
+    const state = getState();
+    const token = state.csoAuth?.token || getStoredCsoAuth().token;
+
+    if (!token) {
+      return rejectWithValue("Unauthorized");
+    }
+
+    try {
+      axios.defaults.headers.common.Authorization = `Bearer ${token}`;
+      const response = await axios.get(`${API_BASE_URL}/api/csos/loans/outstanding`);
+      return response.data;
+    } catch (error) {
+      if (error.response?.status === 401) {
+        clearCsoAuth();
+        delete axios.defaults.headers.common.Authorization;
+        return rejectWithValue("Unauthorized");
+      }
+
+      return rejectWithValue(extractErrorMessage(error, "Unable to fetch outstanding loans"));
+    }
+  }
+);
+
+export const fetchDashboardStats = createAsyncThunk(
+  "loan/fetchDashboardStats",
+  async (timeframe = "today", { getState, rejectWithValue }) => {
+    const state = getState();
+    const token = state.csoAuth?.token || getStoredCsoAuth().token;
+
+    if (!token) return rejectWithValue("Unauthorized");
+
+    try {
+      axios.defaults.headers.common.Authorization = `Bearer ${token}`;
+      const response = await axios.get(`${API_BASE_URL}/api/csos/dashboard-stats`, {
+        params: { timeframe },
+      });
+      return response.data;
+    } catch (error) {
+      if (error.response?.status === 401) {
+        clearCsoAuth();
+        delete axios.defaults.headers.common.Authorization;
+        return rejectWithValue("Unauthorized");
+      }
+      return rejectWithValue(extractErrorMessage(error, "Unable to fetch dashboard statistics"));
+    }
+  }
+);
+
 const loanSlice = createSlice({
   name: "loan",
   initialState,
@@ -284,6 +416,7 @@ const loanSlice = createSlice({
       state.scheduleSyncError = null;
       state.collectionError = null;
       state.formCollectionError = null;
+      state.outstandingError = null;
     },
     resetLoanDetail(state) {
       state.detail = null;
@@ -305,12 +438,16 @@ const loanSlice = createSlice({
       })
       .addCase(fetchCsoLoans.fulfilled, (state, action) => {
         state.loading = false;
-        state.loans = action.payload;
+        state.loans = action.payload?.loans || [];
+        state.loansPagination =
+          action.payload?.pagination || state.loansPagination;
+        state.currentCategoryTotalBalance = action.payload?.totalRemainingBalance || 0;
       })
       .addCase(fetchCsoLoans.rejected, (state, action) => {
         state.loading = false;
         if (action.payload === "Unauthorized") {
           state.loans = [];
+          state.loansPagination = { page: 1, limit: 16, total: 0, totalPages: 1 };
         }
         state.error = action.payload || "Unable to fetch loans";
       })
@@ -328,6 +465,23 @@ const loanSlice = createSlice({
           state.loans = [];
         }
         state.error = action.payload || "Unable to submit loan";
+      })
+      .addCase(submitLoanEdit.pending, (state) => {
+        state.submitting = true;
+        state.error = null;
+      })
+      .addCase(submitLoanEdit.fulfilled, (state, action) => {
+        state.submitting = false;
+        state.loans = state.loans.map((loan) =>
+          loan._id === action.payload._id ? action.payload : loan
+        );
+      })
+      .addCase(submitLoanEdit.rejected, (state, action) => {
+        state.submitting = false;
+        if (action.payload === "Unauthorized") {
+          state.loans = [];
+        }
+        state.error = action.payload || "Unable to submit edited loan";
       })
       .addCase(fetchCsoLoanById.pending, (state) => {
         state.detailLoading = true;
@@ -455,7 +609,7 @@ const loanSlice = createSlice({
         state.formCollectionRecords = action.payload?.records || [];
         state.formCollectionSummary = action.payload?.summary || {
           totalCustomers: 0,
-          totalFormAmount: 0,
+          totalLoanAppForm: 0,
         };
       })
       .addCase(fetchCsoFormCollection.rejected, (state, action) => {
@@ -464,10 +618,60 @@ const loanSlice = createSlice({
           state.formCollectionRecords = [];
           state.formCollectionSummary = {
             totalCustomers: 0,
-            totalFormAmount: 0,
+            totalLoanAppForm: 0,
           };
         }
         state.formCollectionError = action.payload || "Unable to fetch form collection";
+      })
+      .addCase(fetchCsoOutstandingLoans.pending, (state) => {
+        state.outstandingLoading = true;
+        state.outstandingError = null;
+      })
+      .addCase(fetchCsoOutstandingLoans.fulfilled, (state, action) => {
+        state.outstandingLoading = false;
+        state.outstandingLoans = action.payload?.loans || [];
+        state.totalOutstanding = action.payload?.totalOutstanding || 0;
+      })
+      .addCase(fetchCsoOutstandingLoans.rejected, (state, action) => {
+        state.outstandingLoading = false;
+        if (action.payload === "Unauthorized") {
+          state.outstandingLoans = [];
+          state.totalOutstanding = 0;
+        }
+        state.outstandingError = action.payload || "Unable to fetch outstanding loans";
+      })
+      .addCase(fetchCsoLoanCounts.pending, (state) => {
+        state.categoryCountsLoading = true;
+        state.categoryCountsError = null;
+      })
+      .addCase(fetchCsoLoanCounts.fulfilled, (state, action) => {
+        state.categoryCountsLoading = false;
+        state.categoryCounts = action.payload || {
+          all: 0,
+          active: 0,
+          defaults: 0,
+          overdue: 0,
+          recovery: 0,
+          paid: 0,
+          pending: 0,
+          rejected: 0,
+        };
+      })
+      .addCase(fetchCsoLoanCounts.rejected, (state, action) => {
+        state.categoryCountsLoading = false;
+        state.categoryCountsError = action.payload || "Unable to fetch loan counts";
+      })
+      .addCase(fetchDashboardStats.pending, (state) => {
+        state.dashboardStatsLoading = true;
+        state.dashboardStatsError = null;
+      })
+      .addCase(fetchDashboardStats.fulfilled, (state, action) => {
+        state.dashboardStatsLoading = false;
+        state.dashboardStats = action.payload;
+      })
+      .addCase(fetchDashboardStats.rejected, (state, action) => {
+        state.dashboardStatsLoading = false;
+        state.dashboardStatsError = action.payload || "Unable to fetch dashboard statistics";
       });
   },
 });

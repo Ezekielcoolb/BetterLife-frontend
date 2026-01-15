@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
@@ -42,6 +42,7 @@ export default function CustomerDetails() {
   const navigate = useNavigate();
   const { bvn } = useParams();
   const downloadSectionRef = useRef(null);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const {
     customerDetailsRecord,
@@ -175,26 +176,32 @@ export default function CustomerDetails() {
   ].filter((item) => item.url);
 
   const ensureImagesLoaded = async (node) => {
-    if (!node) {
-      return;
-    }
+    if (!node) return;
 
     const images = Array.from(node.querySelectorAll("img"));
-    if (!images.length) {
-      return;
-    }
+    if (!images.length) return;
 
     await Promise.all(
       images.map(
         (img) =>
           new Promise((resolve) => {
-            if (img.complete && img.naturalWidth > 0) {
-              return resolve();
-            }
+            // If already loaded
+            if (img.complete && img.naturalWidth > 0) return resolve();
 
-            const handleResolve = () => {
+            const timer = setTimeout(() => {
+              console.warn("Image load timeout:", img.src);
+              cleanup();
+              resolve();
+            }, 3000); // 3 seconds per image
+
+            const cleanup = () => {
+              clearTimeout(timer);
               img.removeEventListener("load", handleResolve);
               img.removeEventListener("error", handleResolve);
+            };
+
+            const handleResolve = () => {
+              cleanup();
               resolve();
             };
 
@@ -206,38 +213,41 @@ export default function CustomerDetails() {
   };
 
   const handleDownload = async () => {
+    if (isDownloading) return;
+    
     if (!customerDetailsRecord || !downloadSectionRef.current) {
       toast.error("Customer details are not loaded yet.");
       return;
     }
 
-    const templateNode = downloadSectionRef.current;
-    const clone = templateNode.cloneNode(true);
-    const templateWidth = templateNode.style.width || "794px";
-    const templatePadding = templateNode.style.padding || "32px";
-
-    Object.assign(clone.style, {
-      position: "absolute",
-      left: "-9999px",
-      top: "0",
-      width: templateWidth,
-      maxWidth: "none",
-      opacity: "1",
-      visibility: "visible",
-      pointerEvents: "none",
-      display: "block",
-      zIndex: "9999",
-      backgroundColor: "#ffffff",
-      padding: templatePadding,
-      boxSizing: "border-box",
-    });
-
-    document.body.appendChild(clone);
-
-    await ensureImagesLoaded(clone);
-    await new Promise((resolve) => requestAnimationFrame(resolve));
+    setIsDownloading(true);
+    const loadingToast = toast.loading("Generating PDF...");
+    const element = downloadSectionRef.current;
+    
+    // Save original styles
+    const originalStyle = {
+      position: element.style.position,
+      left: element.style.left,
+      opacity: element.style.opacity,
+      zIndex: element.style.zIndex,
+      display: element.style.display,
+    };
 
     try {
+      // Make explicitly visible for capture but keep off-screen/behind
+      // This is crucial for html2canvas to "see" the element correctly
+      Object.assign(element.style, {
+        position: 'fixed',
+        left: '0',
+        top: '0',
+        opacity: '1',
+        zIndex: '-9999',
+        display: 'block',
+      });
+
+      console.log("PDF: Ensuring images are loaded...");
+      await ensureImagesLoaded(element);
+      
       const opt = {
         margin: [10, 10, 10, 10],
         filename: `customer_${bvn}_details.pdf`,
@@ -245,19 +255,22 @@ export default function CustomerDetails() {
         html2canvas: {
           scale: 2,
           useCORS: true,
-          allowTaint: true,
+          logging: false,
           backgroundColor: "#ffffff",
         },
-        jsPDF: { unit: "pt", format: "a4", orientation: "portrait" },
-        pagebreak: { mode: ["css", "legacy"] },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
       };
 
-      await html2pdf().set(opt).from(clone).save();
+      console.log("PDF: Saving...");
+      await html2pdf().set(opt).from(element).save();
+      toast.success("Downloaded!", { id: loadingToast });
     } catch (error) {
-      console.error("PDF download failed:", error);
-      toast.error("Unable to generate PDF. Please try again.");
+      console.error("PDF Fail:", error);
+      toast.error("Failed to generate PDF.", { id: loadingToast });
     } finally {
-      document.body.removeChild(clone);
+      // Restore original styles
+      Object.assign(element.style, originalStyle);
+      setIsDownloading(false);
     }
   };
 
@@ -304,7 +317,7 @@ export default function CustomerDetails() {
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm text-slate-500">Customer BVN</p>
+              <p className="text-sm text-slate-500">Customer NIN</p>
               <h1 className="text-2xl font-semibold text-slate-900">{bvn}</h1>
             </div>
             <div className="text-right">
@@ -339,7 +352,12 @@ export default function CustomerDetails() {
                     rel="noopener noreferrer"
                     className="block overflow-hidden rounded-xl border border-slate-200"
                   >
-                    <img src={`${URL}${url}`} alt={label} className="h-48 w-full object-cover" />
+                    <img 
+                      src={`${URL}${url}`} 
+                      alt={label} 
+                      className="h-48 w-full object-cover" 
+                      crossOrigin="anonymous" 
+                    />
                   </a>
                 </div>
               ))}
@@ -367,9 +385,21 @@ export default function CustomerDetails() {
             <button
               type="button"
               onClick={handleDownload}
-              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500"
+              disabled={isDownloading}
+              className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition ${
+                isDownloading 
+                  ? "bg-indigo-400 cursor-not-allowed" 
+                  : "bg-indigo-600 hover:bg-indigo-500"
+              }`}
             >
-              Download customer form
+              {isDownloading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                "Download customer form"
+              )}
             </button>
             <div className="rounded-full border border-slate-200 bg-white px-4 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
               Latest submission
@@ -392,17 +422,16 @@ export default function CustomerDetails() {
       <div
         ref={downloadSectionRef}
         style={{
-          width: "794px",
-          maxWidth: "100%",
+          width: "210mm", // Standard A4 width
+          position: "absolute",
+          top: 0,
+          left: "-9999px",
+          display: "none", // Will be toggled in handleDownload
           backgroundColor: "#fff",
           color: "#1f2937",
-          padding: "32px",
-          fontFamily: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
-          lineHeight: 1.4,
-          pointerEvents: "none",
-          opacity: 0,
-          visibility: "hidden",
-          display: "none",
+          padding: "20mm",
+          fontFamily: "'Segoe UI', Arial, sans-serif",
+          boxSizing: "border-box",
         }}
       >
         {customerDetailsRecord && (
@@ -431,16 +460,18 @@ function DownloadTemplate({ record, formatDateTime, formatCurrency, assetBaseUrl
   };
 
   const gridStyle = {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-    border: "1px solid #d1d5db",
+    display: "flex",
+    flexWrap: "wrap",
+    borderLeft: "1px solid #d1d5db",
+    borderTop: "1px solid #d1d5db",
   };
 
   const fieldStyle = {
     padding: "8px 12px",
-    borderRight: "1px solid #e5e7eb",
-    borderBottom: "1px solid #e5e7eb",
+    borderRight: "1px solid #d1d5db",
+    borderBottom: "1px solid #d1d5db",
     minHeight: "56px",
+    boxSizing: "border-box",
   };
 
   const labelStyle = {
@@ -463,7 +494,7 @@ function DownloadTemplate({ record, formatDateTime, formatCurrency, assetBaseUrl
       key={label}
       style={{
         ...fieldStyle,
-        gridColumn: `span ${span} / span ${span}`,
+        width: span === 1 ? "50%" : "100%",
       }}
     >
       <div style={labelStyle}>{label}</div>
@@ -605,92 +636,92 @@ function DownloadTemplate({ record, formatDateTime, formatCurrency, assetBaseUrl
 
       <section style={{ marginBottom: "16px" }}>
         <div style={headingStyle}>Pictures</div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-            gap: "16px",
-            padding: "16px",
-          }}
-        >
-          {[{ label: "Customer picture", url: pictures.customer }, { label: "Business picture", url: pictures.business }].map(
-            (item) => (
-              <div key={item.label}>
-                <div style={{ ...labelStyle, marginBottom: "8px" }}>{item.label}</div>
-                {item.url ? (
-                  <img
-                    src={`${assetBaseUrl}${item.url}`}
-                    alt={item.label}
-                    crossOrigin="anonymous"
-                    style={{ width: "100%", height: "180px", objectFit: "cover", borderRadius: "8px" }}
-                  />
-                ) : (
-                  <div style={{ border: "1px dashed #d1d5db", padding: "32px", textAlign: "center" }}>No image</div>
-                )}
-              </div>
-            )
-          )}
-        </div>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "16px",
+              padding: "16px",
+            }}
+          >
+            {[{ label: "Customer picture", url: pictures.customer }, { label: "Business picture", url: pictures.business }].map(
+              (item) => (
+                <div key={item.label} style={{ width: "calc(50% - 8px)" }}>
+                  <div style={{ ...labelStyle, marginBottom: "8px" }}>{item.label}</div>
+                  {item.url ? (
+                    <img
+                      src={`${assetBaseUrl}${item.url}`}
+                      alt={item.label}
+                      crossOrigin="anonymous"
+                      style={{ width: "100%", height: "180px", objectFit: "cover", borderRadius: "8px" }}
+                    />
+                  ) : (
+                    <div style={{ border: "1px dashed #d1d5db", padding: "32px", textAlign: "center" }}>No image</div>
+                  )}
+                </div>
+              )
+            )}
+          </div>
       </section>
 
       <section style={{ marginBottom: "16px" }}>
         <div style={headingStyle}>Terms and conditions</div>
         <div style={{ padding: "16px", fontSize: "12px", color: "#374151" }}>
-          <ol style={{ paddingLeft: "16px", display: "grid", gap: "8px" }}>
-            <li>
-              I affirm that every detail provided in this form is accurate, and I understand that supplying falsified
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div>
+              1. I affirm that every detail provided in this form is accurate, and I understand that supplying falsified
               information could lead to a rejection of my application.
-            </li>
-            <li>
-              I acknowledge that the loan must be repaid according to the agreed schedule, and any default may attract
+            </div>
+            <div>
+              2. I acknowledge that the loan must be repaid according to the agreed schedule, and any default may attract
               penalties or legal action.
-            </li>
-            <li>
-              I authorize JK POS Solution Enterprises to verify all information and contact any references provided.
-            </li>
-            <li>
-              I understand that photographs, signatures, and supporting documents may be used to validate this
+            </div>
+            <div>
+              3. I authorize JK POS Solution Enterprises to verify all information and contact any references provided.
+            </div>
+            <div>
+              4. I understand that photographs, signatures, and supporting documents may be used to validate this
               application.
-            </li>
-            <li>
-              I consent to the processing of my data for operational and compliance purposes.
-            </li>
-          </ol>
+            </div>
+            <div>
+              5. I consent to the processing of my data for operational and compliance purposes.
+            </div>
+          </div>
         </div>
       </section>
 
       <section>
         <div style={headingStyle}>Signatures</div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-            gap: "16px",
-            padding: "16px",
-          }}
-        >
-          {signatureBlocks.map((sign) => (
-            <div key={sign.label} style={{ textAlign: "center" }}>
-              {sign.url ? (
-                <img
-                  src={`${assetBaseUrl}${sign.url}`}
-                  alt={sign.label}
-                  crossOrigin="anonymous"
-                  style={{ height: "80px", objectFit: "contain", margin: "0 auto" }}
-                />
-              ) : (
-                <div
-                  style={{
-                    borderBottom: "1px solid #9ca3af",
-                    height: "60px",
-                    marginBottom: "12px",
-                  }}
-                />
-              )}
-              <div style={{ fontSize: "12px", fontWeight: 600 }}>{sign.label}</div>
-            </div>
-          ))}
-        </div>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: "16px",
+              padding: "16px",
+            }}
+          >
+            {signatureBlocks.map((sign) => (
+              <div key={sign.label} style={{ textAlign: "center", width: "30%" }}>
+                {sign.url ? (
+                  <img
+                    src={`${assetBaseUrl}${sign.url}`}
+                    alt={sign.label}
+                    crossOrigin="anonymous"
+                    style={{ height: "60px", objectFit: "contain", margin: "0 auto" }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      borderBottom: "1px solid #9ca3af",
+                      height: "40px",
+                      marginBottom: "12px",
+                    }}
+                  />
+                )}
+                <div style={{ fontSize: "11px", fontWeight: 600 }}>{sign.label}</div>
+              </div>
+            ))}
+          </div>
       </section>
     </div>
   );

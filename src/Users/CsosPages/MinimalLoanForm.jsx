@@ -5,7 +5,7 @@ import toast from "react-hot-toast";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SignatureCanvas from "react-signature-canvas";
 
-import { clearLoanError, submitLoan } from "../../redux/slices/loanSlice";
+import { clearLoanError, submitLoan, fetchCsoOutstandingLoans } from "../../redux/slices/loanSlice";
 import { uploadImages } from "../../redux/slices/uploadSlice";
 import { fetchMyApprovedGroupLeaders } from "../../redux/slices/groupLeaderSlice";
 
@@ -262,6 +262,8 @@ export default function MinimalLoanForm() {
   const { imageUploadLoading } = useSelector((state) => state.upload);
   const groupLeaders = useSelector((state) => state.groupLeader.items);
   const loadingGroupLeaders = useSelector((state) => state.groupLeader.loading);
+  const { cso: csoAuth } = useSelector((state) => state.csoAuth);
+  const { totalOutstanding } = useSelector((state) => state.loan);
 
   const [form, setForm] = useState(() => buildInitialForm(previousLoan));
   const [activeUploadTarget, setActiveUploadTarget] = useState(null);
@@ -289,9 +291,10 @@ export default function MinimalLoanForm() {
     }
   }, [previousLoan]);
 
-  // Fetch approved group leaders
+  // Fetch approved group leaders and outstanding loans
   useEffect(() => {
     dispatch(fetchMyApprovedGroupLeaders());
+    dispatch(fetchCsoOutstandingLoans());
   }, [dispatch]);
 
   // Handle group leader selection
@@ -478,6 +481,16 @@ export default function MinimalLoanForm() {
 
     if (missingMessages.length) {
       toast.error(missingMessages.join(". "));
+      return;
+    }
+
+    // Check if CSO has exceeded defaulting target
+    const defaultingTarget = csoAuth?.defaultingTarget || 0;
+    if (defaultingTarget > 0 && totalOutstanding > defaultingTarget) {
+      toast.error(
+        `Cannot create loan: Your outstanding defaults (₦${totalOutstanding.toFixed(2)}) exceed your limit (₦${defaultingTarget.toFixed(2)})`,
+        { duration: 5000 }
+      );
       return;
     }
 

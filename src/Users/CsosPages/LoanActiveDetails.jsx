@@ -95,6 +95,28 @@ export default function LoanActiveDetails() {
     balanceRemaining,
   } = useMemo(() => computeLoanMetrics(loan), [loan]);
 
+  const defaultsCount = useMemo(() => {
+    if (!Array.isArray(loan?.repaymentSchedule)) {
+      return 0;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return loan.repaymentSchedule
+      .slice(1)
+      .filter((entry) => {
+        if (!entry?.date || entry?.status !== "pending") {
+          return false;
+        }
+
+        const entryDate = new Date(entry.date);
+        entryDate.setHours(0, 0, 0, 0);
+        return entryDate <= today;
+      })
+      .length;
+  }, [loan?.repaymentSchedule]);
+
   const handleBack = () => {
     navigate(-1);
   };
@@ -154,13 +176,13 @@ export default function LoanActiveDetails() {
   const infoChips = [
     { label: "Loan type", value: loanType ? loanType.toUpperCase() : "—" },
     { label: "Amount disbursed", value: formatCurrency(amountDisbursed) },
-    { label: "Interest", value: formatCurrency(loan?.loanDetails?.interest) },
-    { label: "Total to be paid", value: formatCurrency(amountToBePaid) },
+    { label: "Principal + Interest", value: formatCurrency(amountToBePaid) },
+    { label: "Defaults", value: defaultsCount.toLocaleString("en-NG") },
   ];
 
   const performanceMetrics = [
     {
-      title: "Amount paid so far",
+      title: "Total paid",
       value: formatCurrency(amountPaidSoFar),
       icon: <Wallet className="h-5 w-5 text-emerald-500" />,
     },
@@ -179,12 +201,12 @@ export default function LoanActiveDetails() {
 
   const timeline = [
     {
-      title: "Disbursed on",
+      title: "Loan Start Date",
       value: formatDateWithTime(disbursedAt),
       icon: <CalendarDays className="h-5 w-5 text-emerald-500" />,
     },
     {
-      title: "Projected completion",
+      title: "Loan End Date",
       value: projectedEndDate ? formatDateWithTime(projectedEndDate) : "—",
       icon: <CalendarDays className="h-5 w-5 text-indigo-500" />,
     },

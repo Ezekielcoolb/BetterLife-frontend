@@ -202,7 +202,7 @@ export default function Payment() {
         </button>
 
         <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-          Loan ref:
+          Loan ID:
           <span>{loanRef}</span>
         </span>
       </div>
@@ -214,7 +214,7 @@ export default function Payment() {
             <p className="text-sm text-slate-500">Select one of the quick options below to capture a repayment.</p>
           </div>
           <div className="flex flex-col items-end">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Amount paid so far</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Total Paid</span>
             <span className="text-base font-semibold text-slate-900">{formatCurrency(amountPaidSoFar)}</span>
           </div>
         </header>
@@ -298,7 +298,8 @@ export default function Payment() {
                 value={dateInput}
                 max={new Date().toISOString().slice(0, 10)}
                 onChange={(event) => setDateInput(event.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                disabled={true}
+                className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-500 cursor-not-allowed focus:outline-none"
               />
             </label>
           </div>
@@ -310,7 +311,7 @@ export default function Payment() {
               disabled={paymentDisabled}
             >
               {paymentSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
-              {paymentSubmitting ? "Recording..." : "Record payment"}
+              {paymentSubmitting ? "Submitting..." : "Submit payment"}
             </button>
 
             <button

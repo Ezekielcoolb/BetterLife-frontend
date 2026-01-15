@@ -19,6 +19,35 @@ export const fetchWaitingLoans = createAsyncThunk(
   }
 );
 
+export const fetchAdminLoans = createAsyncThunk(
+  "adminLoans/fetchAdminLoans",
+  async (
+    { status = "all", search = "", csoId = "", page = 1, limit = 10 } = {},
+    { rejectWithValue }
+  ) => {
+    try {
+      const params = { page, limit };
+
+      if (status && status !== "all") {
+        params.status = status;
+      }
+
+      if (search && search.trim()) {
+        params.search = search.trim();
+      }
+
+      if (csoId) {
+        params.csoId = csoId;
+      }
+
+      const response = await axios.get(`${API_BASE_URL}/api/admin/loans`, { params });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(extractErrorMessage(error, "Unable to load loans"));
+    }
+  }
+);
+
 export const fetchApprovedLoans = createAsyncThunk(
   "adminLoans/fetchApproved",
   async (_, { rejectWithValue }) => {
@@ -71,6 +100,84 @@ export const rejectLoan = createAsyncThunk(
   }
 );
 
+export const requestLoanEdit = createAsyncThunk(
+  "adminLoans/requestEdit",
+  async ({ loanId, reason }, { rejectWithValue }) => {
+    try {
+      const response = await axios.patch(`${API_BASE_URL}/api/loans/${loanId}/request-edit`, {
+        reason,
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(extractErrorMessage(error, "Unable to request loan edit"));
+    }
+  }
+);
+
+export const updateLoanCallChecks = createAsyncThunk(
+  "adminLoans/updateCallChecks",
+  async ({ loanId, callChecks }, { rejectWithValue }) => {
+    try {
+      const response = await axios.patch(`${API_BASE_URL}/api/loans/${loanId}/call-checks`, {
+        callChecks,
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(extractErrorMessage(error, "Unable to update call verification"));
+    }
+  }
+);
+
+export const fetchCustomerLoans = createAsyncThunk(
+  "adminLoans/fetchCustomerLoans",
+  async (bvn, { rejectWithValue }) => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/admin/loans/customer/${bvn}`);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(extractErrorMessage(error, "Unable to fetch customer loans"));
+    }
+  }
+);
+
+export const fetchAdminDashboardAnalytics = createAsyncThunk(
+  "adminLoans/fetchAdminDashboardAnalytics",
+  async ({ year } = {}, { rejectWithValue }) => {
+    try {
+      const params = {};
+
+      if (Number.isFinite(year)) {
+        params.year = year;
+      }
+
+      const response = await axios.get(`${API_BASE_URL}/api/admin/dashboard/analytics`, {
+        params,
+      });
+
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(
+        extractErrorMessage(error, "Unable to load admin dashboard analytics")
+      );
+    }
+  }
+);
+
+export const fetchMonthlySummary = createAsyncThunk(
+  "adminLoans/fetchMonthlySummary",
+  async ({ year }, { rejectWithValue }) => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/business-report/monthly-summary`, {
+        params: { year },
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(extractErrorMessage(error, "Unable to load monthly summary"));
+    }
+  }
+);
+
+
 export const disburseLoan = createAsyncThunk(
   "adminLoans/disburse",
   async ({ loanId, disbursementPicture }, { rejectWithValue }) => {
@@ -86,6 +193,22 @@ export const disburseLoan = createAsyncThunk(
 );
 
 const initialState = {
+  adminLoans: [],
+  adminLoansLoading: false,
+  adminLoansError: null,
+  adminLoansCounts: {
+    total: 0,
+    active: 0,
+    fullyPaid: 0,
+    pending: 0,
+    rejected: 0,
+  },
+  adminLoansPagination: {
+    page: 1,
+    limit: 10,
+    totalItems: 0,
+    totalPages: 1,
+  },
   waitingLoans: [],
   waitingLoansLoading: false,
   waitingLoansError: null,
@@ -97,7 +220,12 @@ const initialState = {
   detailError: null,
   updating: false,
   updateError: null,
+  customerLoans: [],
+  customerLoansLoading: false,
+  customerLoansError: null,
   csoLoans: [],
+  csoLoansCso: null,
+  csoLoansPagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
   csoLoansLoading: false,
   csoLoansError: null,
   // CSO Loan Metrics state
@@ -107,6 +235,53 @@ const initialState = {
   csoMetricsYear: new Date().getFullYear(),
   csoMetricsLoading: false,
   csoMetricsError: null,
+  // CSO Weekly loan counts state
+  csoWeeklyData: [],
+  csoWeeklyWeeks: [],
+  csoWeeklySummary: { totalCsos: 0, totalLoans: 0, weekTotals: [] },
+  csoWeeklyMonth: { month: new Date().getMonth() + 1, year: new Date().getFullYear() },
+  csoWeeklyAvailableMonths: [],
+  csoWeeklyGeneratedAt: null,
+  csoWeeklyLoading: false,
+  csoWeeklyError: null,
+  // CSO General report state
+  csoGeneralData: [],
+  csoGeneralSummary: {
+    totalCsos: 0,
+    portfolioWorth: 0,
+    balanceOfDebt: 0,
+    totalRepayment: 0,
+    totalDisbursed: 0,
+    totalInterest: 0,
+    totalLoans: 0,
+    totalRecovery: 0,
+    overshootValue: 0,
+    tenBones: 0,
+    totalLoanAppForm: 0,
+    totalExpenses: 0,
+    totalProfit: 0,
+    loanBalance: 0,
+    profitability: 0,
+  },
+  csoGeneralMonth: {
+    month: new Date().getMonth() + 1,
+    year: new Date().getFullYear(),
+  },
+  csoGeneralAvailableMonths: [],
+  csoGeneralGeneratedAt: null,
+  csoGeneralLoading: false,
+  csoGeneralError: null,
+  // Business report state
+  businessReportWeeks: [],
+  businessReportMonth: {
+    month: new Date().getMonth() + 1,
+    year: new Date().getFullYear(),
+  },
+  businessReportLoading: false,
+  businessReportError: null,
+  businessLiquidityWeeks: [],
+  businessLiquidityLoading: false,
+  businessLiquidityError: null,
   // Customer Loan Weekly state
   customerLoans: [],
   customerLoansPagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
@@ -130,9 +305,17 @@ const initialState = {
   customerDetailsRecord: null,
   customerDetailsLoading: false,
   customerDetailsError: null,
+  monthlySummary: [],
+  monthlySummaryLoading: false,
+  monthlySummaryError: null,
+  monthlySummaryYear: null,
   groupLeaders: [],
   groupLeadersLoading: false,
   groupLeadersError: null,
+  dashboardAnalytics: null,
+  dashboardAnalyticsLoading: false,
+  dashboardAnalyticsError: null,
+  dashboardAnalyticsYear: new Date().getFullYear(),
 };
 
 export const fetchLoansByCsoId = createAsyncThunk(
@@ -157,6 +340,53 @@ export const fetchCsoLoanMetrics = createAsyncThunk(
       return response.data;
     } catch (error) {
       return rejectWithValue(extractErrorMessage(error, "Unable to load CSO loan metrics"));
+    }
+  }
+);
+
+export const fetchCsoWeeklyLoanCounts = createAsyncThunk(
+  "adminLoans/fetchCsoWeeklyLoanCounts",
+  async ({ month, year } = {}, { rejectWithValue }) => {
+    try {
+      const params = {};
+      if (Number.isFinite(month)) params.month = month;
+      if (Number.isFinite(year)) params.year = year;
+
+      const response = await axios.get(`${API_BASE_URL}/api/cso-weekly-loan-counts`, {
+        params,
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(
+        extractErrorMessage(error, "Unable to load CSO weekly loan counts")
+      );
+    }
+  }
+);
+
+export const fetchCsoGeneralReport = createAsyncThunk(
+  "adminLoans/fetchCsoGeneralReport",
+  async ({ month, year } = {}, { rejectWithValue }) => {
+    try {
+      const params = {};
+
+      if (Number.isFinite(month)) {
+        params.month = month;
+      }
+
+      if (Number.isFinite(year)) {
+        params.year = year;
+      }
+
+      const response = await axios.get(`${API_BASE_URL}/api/cso-general-report`, {
+        params,
+      });
+
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(
+        extractErrorMessage(error, "Unable to load CSO general report")
+      );
     }
   }
 );
@@ -192,6 +422,59 @@ export const fetchOverdueLoans = createAsyncThunk(
   }
 );
 
+export const fetchBusinessReportWeeklyMetrics = createAsyncThunk(
+  "adminLoans/fetchBusinessReportWeeklyMetrics",
+  async ({ month, year } = {}, { rejectWithValue }) => {
+    try {
+      const params = {};
+
+      if (Number.isFinite(month)) {
+        params.month = month;
+      }
+
+      if (Number.isFinite(year)) {
+        params.year = year;
+      }
+
+      const response = await axios.get(`${API_BASE_URL}/api/business-report/weekly-metrics`, {
+        params,
+      });
+
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(
+        extractErrorMessage(error, "Unable to load business weekly metrics")
+      );
+    }
+  }
+);
+
+export const fetchBusinessReportLiquidity = createAsyncThunk(
+  "adminLoans/fetchBusinessReportLiquidity",
+  async ({ month, year } = {}, { rejectWithValue }) => {
+    try {
+      const params = {};
+
+      if (Number.isFinite(month)) {
+        params.month = month;
+      }
+
+      if (Number.isFinite(year)) {
+        params.year = year;
+      }
+
+      const response = await axios.get(`${API_BASE_URL}/api/business-report/liquidity`, {
+        params,
+      });
+
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(
+        extractErrorMessage(error, "Unable to load business liquidity metrics")
+      );
+    }
+  }
+);
 
 export const fetchCustomerSummary = createAsyncThunk(
   "adminLoans/fetchCustomerSummary",
@@ -245,11 +528,13 @@ export const fetchCustomerDetailsByBvn = createAsyncThunk(
 
 export const fetchCsoCustomers = createAsyncThunk(
   "adminLoans/fetchCsoCustomers",
-  async ({ csoId, search, groupId }, { rejectWithValue }) => {
+  async ({ csoId, search, groupId, page, limit }, { rejectWithValue }) => {
     try {
       const params = {};
       if (search) params.search = search;
       if (groupId) params.groupId = groupId;
+      if (Number.isFinite(page)) params.page = page;
+      if (Number.isFinite(limit)) params.limit = limit;
       
       const response = await axios.get(`${API_BASE_URL}/api/loans/cso/${csoId}/customers`, {
         params,
@@ -288,31 +573,79 @@ export const assignCustomersToGroup = createAsyncThunk(
   }
 );
 
+export const assignCustomersToCso = createAsyncThunk(
+  "adminLoans/assignCustomersToCso",
+  async ({ loanIds, csoId }, { rejectWithValue }) => {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/loans/assign-cso`, {
+        loanIds,
+        csoId,
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(extractErrorMessage(error, "Unable to assign customers to CSO"));
+    }
+  }
+);
+
 const adminLoanSlice = createSlice({
   name: "adminLoans",
   initialState,
   reducers: {
     clearAdminLoanErrors(state) {
+      state.adminLoansError = null;
       state.waitingLoansError = null;
       state.approvedLoansError = null;
       state.detailError = null;
       state.updateError = null;
       state.csoLoansError = null;
       state.csoMetricsError = null;
+      state.csoWeeklyError = null;
+      state.csoGeneralError = null;
       state.customerLoansError = null;
       state.overdueLoansError = null;
       state.customerSummaryError = null;
       state.customerLoanHistoryError = null;
       state.customerDetailsError = null;
+      state.businessReportError = null;
+      state.businessLiquidityError = null;
     },
     resetLoanDetail(state) {
       state.detail = null;
       state.detailLoading = false;
       state.detailError = null;
     },
+    setDashboardAnalyticsYear(state, action) {
+      state.dashboardAnalyticsYear = action.payload;
+    },
   },
   extraReducers: (builder) => {
     builder
+      .addCase(fetchAdminLoans.pending, (state) => {
+        state.adminLoansLoading = true;
+        state.adminLoansError = null;
+      })
+      .addCase(fetchAdminLoans.fulfilled, (state, action) => {
+        state.adminLoansLoading = false;
+        state.adminLoans = action.payload?.data || [];
+        state.adminLoansPagination = {
+          page: action.payload?.pagination?.page || 1,
+          limit: action.payload?.pagination?.limit || 10,
+          totalItems: action.payload?.pagination?.totalItems || 0,
+          totalPages: action.payload?.pagination?.totalPages || 1,
+        };
+        state.adminLoansCounts = {
+          total: action.payload?.counts?.total || 0,
+          active: action.payload?.counts?.active || 0,
+          fullyPaid: action.payload?.counts?.fullyPaid || 0,
+          pending: action.payload?.counts?.pending || 0,
+          rejected: action.payload?.counts?.rejected || 0,
+        };
+      })
+      .addCase(fetchAdminLoans.rejected, (state, action) => {
+        state.adminLoansLoading = false;
+        state.adminLoansError = action.payload || "Unable to load loans";
+      })
       .addCase(fetchWaitingLoans.pending, (state) => {
         state.waitingLoansLoading = true;
         state.waitingLoansError = null;
@@ -369,11 +702,57 @@ const adminLoanSlice = createSlice({
       .addCase(rejectLoan.fulfilled, (state, action) => {
         state.updating = false;
         state.detail = action.payload;
-        state.waitingLoans = state.waitingLoans.filter((loan) => loan._id !== action.payload._id);
+        const updated = action.payload;
+        if (updated.status === "waiting for approval" || updated.status === "edited") {
+          state.waitingLoans = state.waitingLoans.map((loan) =>
+            loan._id === updated._id ? updated : loan
+          );
+        } else {
+          state.waitingLoans = state.waitingLoans.filter((loan) => loan._id !== updated._id);
+        }
       })
       .addCase(rejectLoan.rejected, (state, action) => {
         state.updating = false;
         state.updateError = action.payload || "Unable to reject loan";
+      })
+      .addCase(requestLoanEdit.pending, (state) => {
+        state.updating = true;
+        state.updateError = null;
+      })
+      .addCase(requestLoanEdit.fulfilled, (state, action) => {
+        state.updating = false;
+        state.detail = action.payload;
+        state.waitingLoans = state.waitingLoans.map((loan) =>
+          loan._id === action.payload._id ? action.payload : loan
+        );
+      })
+      .addCase(requestLoanEdit.rejected, (state, action) => {
+        state.updating = false;
+        state.updateError = action.payload || "Unable to request loan edit";
+      })
+      .addCase(fetchCustomerLoans.pending, (state) => {
+        state.customerLoansLoading = true;
+        state.customerLoansError = null;
+      })
+      .addCase(fetchCustomerLoans.fulfilled, (state, action) => {
+        state.customerLoansLoading = false;
+        state.customerLoans = action.payload;
+      })
+      .addCase(fetchCustomerLoans.rejected, (state, action) => {
+        state.customerLoansLoading = false;
+        state.customerLoansError = action.payload || "Unable to fetch customer loans";
+      })
+      .addCase(updateLoanCallChecks.pending, (state) => {
+        state.updateError = null;
+      })
+      .addCase(updateLoanCallChecks.fulfilled, (state, action) => {
+        state.detail = action.payload;
+        state.waitingLoans = state.waitingLoans.map((loan) =>
+          loan._id === action.payload._id ? action.payload : loan
+        );
+      })
+      .addCase(updateLoanCallChecks.rejected, (state, action) => {
+        state.updateError = action.payload || "Unable to update call verification";
       })
       .addCase(disburseLoan.pending, (state) => {
         state.updating = true;
@@ -413,6 +792,43 @@ const adminLoanSlice = createSlice({
       .addCase(fetchCsoLoanMetrics.rejected, (state, action) => {
         state.csoMetricsLoading = false;
         state.csoMetricsError = action.payload || "Unable to load CSO loan metrics";
+      })
+      .addCase(fetchCsoWeeklyLoanCounts.pending, (state) => {
+        state.csoWeeklyLoading = true;
+        state.csoWeeklyError = null;
+      })
+      .addCase(fetchCsoWeeklyLoanCounts.fulfilled, (state, action) => {
+        state.csoWeeklyLoading = false;
+        state.csoWeeklyData = action.payload?.data || [];
+        state.csoWeeklyWeeks = action.payload?.weeks || [];
+        state.csoWeeklySummary = action.payload?.summary || {
+          totalCsos: 0,
+          totalLoans: 0,
+          weekTotals: [],
+        };
+        state.csoWeeklyMonth = action.payload?.month || state.csoWeeklyMonth;
+        state.csoWeeklyAvailableMonths = action.payload?.availableMonths || [];
+        state.csoWeeklyGeneratedAt = action.payload?.generatedAt || null;
+      })
+      .addCase(fetchCsoWeeklyLoanCounts.rejected, (state, action) => {
+        state.csoWeeklyLoading = false;
+        state.csoWeeklyError = action.payload || "Unable to load CSO weekly loan counts";
+      })
+      .addCase(fetchCsoGeneralReport.pending, (state) => {
+        state.csoGeneralLoading = true;
+        state.csoGeneralError = null;
+      })
+      .addCase(fetchCsoGeneralReport.fulfilled, (state, action) => {
+        state.csoGeneralLoading = false;
+        state.csoGeneralData = action.payload?.data || [];
+        state.csoGeneralSummary = action.payload?.summary || state.csoGeneralSummary;
+        state.csoGeneralMonth = action.payload?.month || state.csoGeneralMonth;
+        state.csoGeneralAvailableMonths = action.payload?.availableMonths || [];
+        state.csoGeneralGeneratedAt = action.payload?.generatedAt || null;
+      })
+      .addCase(fetchCsoGeneralReport.rejected, (state, action) => {
+        state.csoGeneralLoading = false;
+        state.csoGeneralError = action.payload || "Unable to load CSO general report";
       })
       .addCase(fetchCustomerLoanWeekly.pending, (state) => {
         state.customerLoansLoading = true;
@@ -454,6 +870,34 @@ const adminLoanSlice = createSlice({
         state.customerSummaryLoading = false;
         state.customerSummaryError = action.payload || "Unable to load customer summary";
       })
+      .addCase(fetchBusinessReportWeeklyMetrics.pending, (state) => {
+        state.businessReportLoading = true;
+        state.businessReportError = null;
+      })
+      .addCase(fetchBusinessReportWeeklyMetrics.fulfilled, (state, action) => {
+        state.businessReportLoading = false;
+        state.businessReportWeeks = action.payload?.weeks || [];
+        state.businessReportMonth = action.payload?.month || state.businessReportMonth;
+      })
+      .addCase(fetchBusinessReportWeeklyMetrics.rejected, (state, action) => {
+        state.businessReportLoading = false;
+        state.businessReportError = action.payload || "Unable to load business weekly metrics";
+      })
+      .addCase(fetchBusinessReportLiquidity.pending, (state) => {
+        state.businessLiquidityLoading = true;
+        state.businessLiquidityError = null;
+      })
+      .addCase(fetchBusinessReportLiquidity.fulfilled, (state, action) => {
+        state.businessLiquidityLoading = false;
+        state.businessLiquidityWeeks = action.payload?.weeks || [];
+        if (action.payload?.month) {
+          state.businessReportMonth = action.payload.month;
+        }
+      })
+      .addCase(fetchBusinessReportLiquidity.rejected, (state, action) => {
+        state.businessLiquidityLoading = false;
+        state.businessLiquidityError = action.payload || "Unable to load business liquidity metrics";
+      })
       .addCase(fetchCustomerLoansByBvn.pending, (state) => {
         state.customerLoanHistoryLoading = true;
         state.customerLoanHistoryError = null;
@@ -491,7 +935,10 @@ const adminLoanSlice = createSlice({
       })
       .addCase(fetchCsoCustomers.fulfilled, (state, action) => {
         state.csoLoansLoading = false;
-        state.csoLoans = action.payload;
+        state.csoLoans = action.payload?.customers || [];
+        state.csoLoansCso = action.payload?.cso || null;
+        state.csoLoansPagination =
+          action.payload?.pagination || state.csoLoansPagination;
       })
       .addCase(fetchCsoCustomers.rejected, (state, action) => {
         state.csoLoansLoading = false;
@@ -519,9 +966,49 @@ const adminLoanSlice = createSlice({
       .addCase(assignCustomersToGroup.rejected, (state, action) => {
         state.updating = false;
         state.updateError = action.payload || "Unable to assign customers to group";
+      })
+      .addCase(assignCustomersToCso.pending, (state) => {
+        state.updating = true;
+        state.updateError = null;
+      })
+      .addCase(assignCustomersToCso.fulfilled, (state) => {
+        state.updating = false;
+      })
+      .addCase(assignCustomersToCso.rejected, (state, action) => {
+        state.updating = false;
+        state.updateError = action.payload || "Unable to assign customers to CSO";
+      })
+      .addCase(fetchMonthlySummary.pending, (state) => {
+        state.monthlySummaryLoading = true;
+        state.monthlySummaryError = null;
+      })
+      .addCase(fetchMonthlySummary.fulfilled, (state, action) => {
+        state.monthlySummaryLoading = false;
+        state.monthlySummary = action.payload.monthSummary || [];
+        state.monthlySummaryYear = action.payload.year;
+      })
+      .addCase(fetchMonthlySummary.rejected, (state, action) => {
+        state.monthlySummaryLoading = false;
+        state.monthlySummaryError = action.payload || "Unable to load monthly summary";
+      })
+      .addCase(fetchAdminDashboardAnalytics.pending, (state, action) => {
+        state.dashboardAnalyticsLoading = true;
+        state.dashboardAnalyticsError = null;
+        if (Number.isFinite(action.meta?.arg?.year)) {
+          state.dashboardAnalyticsYear = action.meta.arg.year;
+        }
+      })
+      .addCase(fetchAdminDashboardAnalytics.fulfilled, (state, action) => {
+        state.dashboardAnalyticsLoading = false;
+        state.dashboardAnalytics = action.payload;
+      })
+      .addCase(fetchAdminDashboardAnalytics.rejected, (state, action) => {
+        state.dashboardAnalyticsLoading = false;
+        state.dashboardAnalyticsError = action.payload || "Unable to load admin dashboard analytics";
       });
   },
 });
 
-export const { clearAdminLoanErrors, resetLoanDetail } = adminLoanSlice.actions;
+export const { clearAdminLoanErrors, resetLoanDetail, setDashboardAnalyticsYear } =
+  adminLoanSlice.actions;
 export default adminLoanSlice.reducer;

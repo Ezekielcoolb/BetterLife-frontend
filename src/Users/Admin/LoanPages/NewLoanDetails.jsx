@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
+import axios from "axios";
+import LoanCard from "../../CsosPages/LoanCard";
 import toast from "react-hot-toast";
-import { ArrowLeft, CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileText, Loader2, X, XCircle } from "lucide-react";
 import {
   approveLoan,
   clearAdminLoanErrors,
   fetchLoanById,
+  fetchCustomerLoans,
   rejectLoan,
+  requestLoanEdit,
   resetLoanDetail,
+  updateLoanCallChecks,
 } from "../../../redux/slices/adminLoanSlice";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
@@ -92,10 +97,31 @@ export default function NewLoanDetails() {
   const navigate = useNavigate();
   const { id } = useParams();
 
-  const { detail, detailLoading, detailError, updating, updateError } = useSelector((state) => state.adminLoans);
+  const {
+    detail,
+    detailLoading,
+    detailError,
+    updating,
+    updateError,
+    customerLoans,
+    customerLoansLoading,
+    customerLoansError,
+  } = useSelector((state) => state.adminLoans);
 
   const [amountApproved, setAmountApproved] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
+  const [editReason, setEditReason] = useState("");
+  const [callChecks, setCallChecks] = useState({
+    callCso: false,
+    callCustomer: false,
+    callGuarantor: false,
+    callGroupLeader: false,
+  });
+  const [savingCallChecks, setSavingCallChecks] = useState(false);
+  const [showPreviousLoans, setShowPreviousLoans] = useState(false);
+  const [loanCardData, setLoanCardData] = useState(null);
+  const [loanCardLoading, setLoanCardLoading] = useState(false);
+  const [pendingConfirmation, setPendingConfirmation] = useState(null);
 
   useEffect(() => {
     if (!id) {
@@ -134,7 +160,23 @@ export default function NewLoanDetails() {
       typeof requestedAmount === "number" && !Number.isNaN(requestedAmount) ? requestedAmount.toString() : ""
     );
     setRejectionReason("");
+    setEditReason(detail?.editedReason || "");
+    setCallChecks({
+      callCso: Boolean(detail?.callChecks?.callCso),
+      callCustomer: Boolean(detail?.callChecks?.callCustomer),
+      callGuarantor: Boolean(detail?.callChecks?.callGuarantor),
+      callGroupLeader: Boolean(detail?.callChecks?.callGroupLeader),
+    });
+
+    const customerBvn = detail?.customerDetails?.bvn;
+    if (customerBvn) {
+      dispatch(fetchCustomerLoans(customerBvn));
+    }
   }, [detail]);
+
+  const canModifyDecision = detail?.status === "waiting for approval";
+  const canRequestEdit = detail?.status !== "active loan" && detail?.status !== "fully paid";
+  const allCallsCompleted = Object.values(callChecks).every(Boolean);
 
   const customerInfo = useMemo(() => {
     const customer = detail?.customerDetails || {};
@@ -150,7 +192,7 @@ export default function NewLoanDetails() {
       { label: "Date of birth", value: customer.dateOfBirth },
       {
         label: "Customer signature",
-        render: () => <MediaThumbnail url={pictures.signature} alt="Customer signature" />,
+        render: () => <MediaThumbnail url={resolveAssetUrl(pictures.signature)} alt="Customer signature" />,
       },
     ];
   }, [detail]);
@@ -186,7 +228,7 @@ export default function NewLoanDetails() {
       { label: "Years known", value: guarantor.yearsKnown },
       {
         label: "Guarantor signature",
-        render: () => <MediaThumbnail url={guarantor.signature} alt="Guarantor signature" />,
+        render: () => <MediaThumbnail url={resolveAssetUrl(guarantor.signature)} alt="Guarantor signature" />,
       },
     ];
   }, [detail]);
@@ -198,7 +240,7 @@ export default function NewLoanDetails() {
       { label: "Branch", value: detail?.branch },
       {
         label: "CSO signature",
-        render: () => <MediaThumbnail url={detail?.csoSignature} alt="CSO signature" />,
+        render: () => <MediaThumbnail url={resolveAssetUrl(detail?.csoSignature)} alt="CSO signature" />,
       },
     ];
   }, [detail]);
@@ -234,7 +276,142 @@ export default function NewLoanDetails() {
     { label: "Disclosure", url: pictures.disclosure },
   ].filter((item) => item.url);
 
-  const handleApprove = async () => {
+  const previousLoans = useMemo(() => {
+    if (!Array.isArray(customerLoans) || !detail?._id) {
+      return [];
+    }
+
+    return customerLoans.filter((loan) => loan._id !== detail._id);
+  }, [customerLoans, detail?._id]);
+
+  const toggleCallCheck = async (key) => {
+    if (!detail?._id) {
+      return;
+    }
+
+    const nextValue = !callChecks[key];
+    setCallChecks((prev) => ({ ...prev, [key]: nextValue }));
+    setSavingCallChecks(true);
+
+    try {
+      await dispatch(
+        updateLoanCallChecks({ loanId: detail._id, callChecks: { [key]: nextValue } })
+      ).unwrap();
+      toast.success(nextValue ? "Verification recorded" : "Verification unchecked");
+    } catch (error) {
+      const message = typeof error === "string" ? error : "Unable to update verification";
+      toast.error(message);
+      setCallChecks((prev) => ({ ...prev, [key]: !nextValue }));
+    } finally {
+      setSavingCallChecks(false);
+    }
+  };
+
+  const openConfirmation = (action) => {
+    setPendingConfirmation(action);
+  };
+
+  const closeConfirmation = () => {
+    setPendingConfirmation(null);
+  };
+
+  const confirmAction = async () => {
+    if (!pendingConfirmation) {
+      return;
+    }
+
+    const actionType = pendingConfirmation.type;
+    closeConfirmation();
+
+    if (actionType === "approve") {
+      await executeApprove();
+    } else if (actionType === "reject") {
+      await executeReject();
+    } else if (actionType === "edit") {
+      await executeRequestEdit();
+    }
+  };
+
+  const confirmationCopy = useMemo(() => {
+    if (!pendingConfirmation) {
+      return null;
+    }
+
+    const amountText = new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "NGN",
+      minimumFractionDigits: 2,
+    }).format(Number(amountApproved) || 0);
+
+    const customerName = [detail?.customerDetails?.firstName, detail?.customerDetails?.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+
+    if (pendingConfirmation.type === "approve") {
+      return {
+        title: "Confirm approval",
+        description: `You are about to approve a loan of ${amountText} for ${customerName || "this customer"}. Confirm to proceed.`,
+        cta: "Confirm approval",
+        tone: "emerald",
+      };
+    }
+
+    if (pendingConfirmation.type === "reject") {
+      return {
+        title: "Confirm rejection",
+        description: `You are about to reject this loan for ${customerName || "this customer"}. This action cannot be undone.`,
+        cta: "Reject loan",
+        tone: "rose",
+      };
+    }
+
+    return {
+      title: "Request CSO edits",
+      description: `You are about to send this loan back for corrections. ${customerName || "The customer"} will remain on hold until edits are made.`,
+      cta: "Send edit request",
+      tone: "amber",
+    };
+  }, [amountApproved, detail?.customerDetails?.firstName, detail?.customerDetails?.lastName, pendingConfirmation]);
+
+  const CALL_CHECK_OPTIONS = [
+    { key: "callCso", label: "Contacted CSO" },
+    { key: "callCustomer", label: "Called customer" },
+    { key: "callGuarantor", label: "Called guarantor" },
+    { key: "callGroupLeader", label: "Called group leader" },
+  ];
+
+  const handlePreviewLoanCard = async (loanId) => {
+    if (!loanId) {
+      toast.error("Unable to locate loan details");
+      return;
+    }
+
+    setLoanCardLoading(true);
+    setLoanCardData(null);
+
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/loans/${loanId}`);
+      setLoanCardData(response.data);
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || "Unable to load loan card";
+      toast.error(message);
+    } finally {
+      setLoanCardLoading(false);
+    }
+  };
+
+  const closeLoanCardModal = () => {
+    setLoanCardData(null);
+    setLoanCardLoading(false);
+  };
+
+  const executeApprove = async () => {
+    if (!allCallsCompleted) {
+      toast.error("Complete all verification calls before approving this loan");
+      return;
+    }
+
     const parsedAmount = Number(amountApproved);
 
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
@@ -252,18 +429,39 @@ export default function NewLoanDetails() {
     }
   };
 
-  const handleReject = async () => {
-    if (!rejectionReason.trim()) {
-      toast.error("Provide a reason for rejection");
+  const executeReject = async () => {
+    const trimmed = rejectionReason.trim();
+
+    if (!trimmed) {
+      toast.error("Provide a reason for rejection before submitting");
       return;
     }
 
     try {
-      await dispatch(rejectLoan({ loanId: detail._id, reason: rejectionReason.trim() })).unwrap();
+      await dispatch(rejectLoan({ loanId: detail._id, reason: trimmed })).unwrap();
       toast.success("Loan rejected");
+      setRejectionReason("");
       navigate("/admin/loans", { replace: true });
     } catch (error) {
       const message = typeof error === "string" ? error : "Unable to reject loan";
+      toast.error(message);
+    }
+  };
+
+  const executeRequestEdit = async () => {
+    const trimmed = editReason.trim();
+
+    if (!trimmed) {
+      toast.error("Explain what needs to be corrected before requesting edits");
+      return;
+    }
+
+    try {
+      await dispatch(requestLoanEdit({ loanId: detail._id, reason: trimmed })).unwrap();
+      toast.success("Edit request sent to CSO");
+      setEditReason("");
+    } catch (error) {
+      const message = typeof error === "string" ? error : "Unable to request edit";
       toast.error(message);
     }
   };
@@ -316,7 +514,130 @@ export default function NewLoanDetails() {
           </div>
         </header>
 
-        <div className="mt-6 grid gap-6 md:grid-cols-2">
+        <section className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">Previous loans for this customer</h3>
+                <p className="text-sm text-slate-500">Click to view historic submissions when needed.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPreviousLoans((prev) => !prev)}
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+              >
+                {showPreviousLoans ? "Hide previous loans" : "View previous loans"}
+              </button>
+            </div>
+
+            {showPreviousLoans && (
+              <div className="mt-4 space-y-4">
+                {customerLoansLoading && (
+                  <div className="flex items-center gap-2 text-sm font-semibold text-indigo-600">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading history
+                  </div>
+                )}
+
+                {customerLoansError && (
+                  <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600">
+                    {customerLoansError}
+                  </p>
+                )}
+
+                {previousLoans.length === 0 && !customerLoansLoading ? (
+                  <p className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                    No earlier loans found for this customer.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-slate-200 text-sm">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-700">Loan ID</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-700">Submitted</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-700">Amount requested</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-700">Status</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-700">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {previousLoans.map((loan) => (
+                          <tr key={loan._id} className="bg-white">
+                            <td className="px-4 py-2 font-semibold text-slate-800">{loan.loanId}</td>
+                            <td className="px-4 py-2 text-slate-600">
+                              {new Date(loan.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="px-4 py-2 text-slate-600">
+                              ₦{Number(loan.loanDetails?.amountRequested || 0).toLocaleString("en-NG")}
+                            </td>
+                            <td className="px-4 py-2 text-slate-600">{loan.status}</td>
+                            <td className="px-4 py-2">
+                              <button
+                                type="button"
+                                onClick={() => handlePreviewLoanCard(loan._id)}
+                                className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50"
+                              >
+                                View loan card
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-base font-semibold text-amber-900">Loan verification checklist</h3>
+              <p className="text-sm text-amber-800">
+                Confirm the required calls before approving this loan. All items must be checked.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              {allCallsCompleted ? (
+                <span className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-emerald-700">
+                  <CheckCircle2 className="h-4 w-4" /> Ready for approval
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-2 rounded-full bg-amber-200 px-3 py-1 text-amber-900">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Pending verifications
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {CALL_CHECK_OPTIONS.map((option) => (
+              <label
+                key={option.key}
+                className="flex items-start gap-3 rounded-xl border border-amber-200 bg-white px-4 py-3 shadow-sm"
+              >
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-amber-500 focus:ring-amber-400"
+                  checked={callChecks[option.key]}
+                  onChange={() => toggleCallCheck(option.key)}
+                  disabled={savingCallChecks || !canModifyDecision}
+                />
+                <span className="text-sm font-medium text-slate-700">{option.label}</span>
+              </label>
+            ))}
+          </div>
+
+          {!allCallsCompleted && (
+            <p className="mt-4 flex items-center gap-2 text-sm font-medium text-amber-900">
+              <FileText className="h-4 w-4" /> Approval will remain disabled until all calls are confirmed.
+            </p>
+          )}
+        </section>
+
+        <div className="mt-6 grid gap-6 md:grid-cols-3">
           <div className="space-y-4">
             <label className="text-sm font-semibold text-slate-700" htmlFor="amountApproved">
               Approve amount (₦)
@@ -329,13 +650,13 @@ export default function NewLoanDetails() {
               onChange={(event) => setAmountApproved(event.target.value)}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
               placeholder="Enter amount"
-              disabled={updating}
+              disabled={updating || !canModifyDecision || !allCallsCompleted}
             />
             <button
               type="button"
-              onClick={handleApprove}
+              onClick={() => openConfirmation({ type: "approve" })}
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400"
-              disabled={updating}
+              disabled={updating || !canModifyDecision || !allCallsCompleted}
             >
               {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Approve loan
@@ -353,16 +674,40 @@ export default function NewLoanDetails() {
               onChange={(event) => setRejectionReason(event.target.value)}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-200"
               placeholder="Provide context for rejection"
-              disabled={updating}
+              disabled={updating || !canModifyDecision}
             />
             <button
               type="button"
-              onClick={handleReject}
+              onClick={() => openConfirmation({ type: "reject" })}
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-rose-400"
-              disabled={updating}
+              disabled={updating || !canModifyDecision}
             >
               {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
               Reject loan
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <label className="text-sm font-semibold text-slate-700" htmlFor="editReason">
+              Request CSO edits (reason)
+            </label>
+            <textarea
+              id="editReason"
+              rows={4}
+              value={editReason}
+              onChange={(event) => setEditReason(event.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-200"
+              placeholder="Explain what needs to be corrected before approval"
+              disabled={updating || !canRequestEdit}
+            />
+            <button
+              type="button"
+              onClick={() => openConfirmation({ type: "edit" })}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-amber-300"
+              disabled={updating || !canRequestEdit}
+            >
+              {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+              Ask for edit
             </button>
           </div>
         </div>
@@ -372,7 +717,103 @@ export default function NewLoanDetails() {
             Previously rejected with reason: {detail.rejectionReason}
           </div>
         )}
+
+        {detail.editedReason && (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+            Edit requested: {detail.editedReason}
+          </div>
+        )}
       </section>
+
+      {(loanCardLoading || loanCardData) && (
+        <div className="fixed inset-0 z-50">
+          <div
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            aria-hidden="true"
+            onClick={closeLoanCardModal}
+          />
+
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="relative w-full max-w-4xl rounded-3xl bg-white p-6 shadow-2xl">
+              <button
+                type="button"
+                onClick={closeLoanCardModal}
+                className="absolute right-4 top-4 rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                aria-label="Close loan card"
+              >
+                <X className="h-5 w-5" />
+              </button>
+
+              <h3 className="mb-4 text-lg font-semibold text-slate-900">Loan card preview</h3>
+
+              {loanCardLoading ? (
+                <div className="flex min-h-[300px] items-center justify-center">
+                  <span className="inline-flex items-center gap-2 text-sm font-semibold text-indigo-600">
+                    <Loader2 className="h-5 w-5 animate-spin" /> Loading loan card...
+                  </span>
+                </div>
+              ) : loanCardData ? (
+                <div className="max-h-[70vh] overflow-y-auto">
+                  <LoanCard loan={loanCardData} />
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/admin/loans/${loanCardData._id}`)}
+                    className="mt-6 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+                  >
+                    Open full loan page
+                  </button>
+                </div>
+              ) : (
+                <p className="text-sm text-rose-600">Unable to load loan card.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingConfirmation && confirmationCopy && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={closeConfirmation} aria-hidden="true" />
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="relative w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
+              <button
+                type="button"
+                onClick={closeConfirmation}
+                className="absolute right-4 top-4 rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                aria-label="Close confirmation"
+              >
+                <X className="h-5 w-5" />
+              </button>
+
+              <h3 className="text-lg font-semibold text-slate-900">{confirmationCopy.title}</h3>
+              <p className="mt-2 text-sm text-slate-600">{confirmationCopy.description}</p>
+
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closeConfirmation}
+                  className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmAction}
+                  className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition ${
+                    confirmationCopy.tone === "emerald"
+                      ? "bg-emerald-600 hover:bg-emerald-700"
+                      : confirmationCopy.tone === "rose"
+                      ? "bg-rose-600 hover:bg-rose-700"
+                      : "bg-amber-500 hover:bg-amber-600"
+                  }`}
+                >
+                  {confirmationCopy.cta}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <InfoSection title="CSO details" items={csoInfo} />
       <InfoSection title="Customer details" items={customerInfo} />

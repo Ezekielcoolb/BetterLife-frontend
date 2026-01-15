@@ -32,13 +32,14 @@ export const deleteBranch = createAsyncThunk("branch/delete", async (branchId, {
 
 export const updateBranchTargets = createAsyncThunk(
   "branch/updateTargets",
-  async ({ id, loanTarget, disbursementTarget }, { rejectWithValue }) => {
+  async ({ scope = "single", branchId, loanTarget, disbursementTarget }, { rejectWithValue }) => {
     try {
-      const response = await axios.patch(`${API_BASE_URL}/api/branches/${id}/targets`, {
+      const targetId = scope === "all" ? "all" : branchId;
+      const response = await axios.patch(`${API_BASE_URL}/api/branches/${targetId}/targets`, {
         loanTarget,
         disbursementTarget,
       });
-      return response.data;
+      return { scope, data: response.data };
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || "Failed to update targets");
     }
@@ -90,9 +91,19 @@ const branchSlice = createSlice({
         state.error = action.payload || "Failed to delete branch";
       })
       .addCase(updateBranchTargets.fulfilled, (state, action) => {
-        state.items = state.items.map((branch) =>
-          branch._id === action.payload._id ? action.payload : branch
-        );
+        const { scope, data } = action.payload;
+
+        if (scope === "all" && Array.isArray(data)) {
+          const updates = new Map(data.map((branch) => [branch._id, branch]));
+          state.items = state.items.map((branch) => updates.get(branch._id) || branch);
+          return;
+        }
+
+        if (scope === "single" && data?._id) {
+          state.items = state.items.map((branch) =>
+            branch._id === data._id ? data : branch
+          );
+        }
       })
       .addCase(updateBranchTargets.rejected, (state, action) => {
         state.error = action.payload || "Failed to update targets";

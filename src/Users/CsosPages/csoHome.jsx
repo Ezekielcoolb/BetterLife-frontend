@@ -1,15 +1,36 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { submitLoan, clearLoanError, fetchCsoLoans } from "../../redux/slices/loanSlice";
+import {
+  submitLoan,
+  clearLoanError,
+  fetchCsoLoans,
+  fetchCsoOutstandingLoans,
+  submitLoanEdit,
+} from "../../redux/slices/loanSlice";
 import { fetchMyApprovedGroupLeaders, createGroupLeader } from "../../redux/slices/groupLeaderSlice";
 import { uploadImages } from "../../redux/slices/uploadSlice";
 import { useNavigate } from "react-router-dom";
 import SignatureCanvas from "react-signature-canvas";
 import toast from "react-hot-toast";
-import { Plus, Upload, Loader2, X, AlertCircle, CheckCircle2, Clock, FileText, Sparkles, ListChecks, Users, UserPlus } from "lucide-react";
+import {
+  Plus,
+  Upload,
+  Loader2,
+  X,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  FileText,
+  Sparkles,
+  ListChecks,
+  Users,
+  UserPlus,
+  ArrowLeft,
+  ArrowRight,
+  Search,
+} from "lucide-react";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
-const TOTAL_STEPS = 2;
 
 function getRemittanceReferenceDate(baseDate = new Date()) {
   const reference = new Date(baseDate);
@@ -46,15 +67,28 @@ function formatRemittanceDateLabel(date) {
 const STEP_ITEMS = [
   {
     id: 1,
-    title: "Customer & guarantor",
-    description: "Borrower details and guarantor contacts",
+    title: "Customer & group",
+    description: "Borrower identity and group selection",
   },
   {
     id: 2,
+    title: "Business & guarantor",
+    description: "Business profile and guarantor confirmation",
+  },
+  {
+    id: 3,
     title: "Bank, loan & uploads",
     description: "Financial details, media uploads, and signatures",
   },
+  {
+    id: 4,
+    title: "Review & submit",
+    description: "Confirm every section before submission",
+  },
 ];
+
+const TOTAL_STEPS = STEP_ITEMS.length;
+const REVIEW_STEP = TOTAL_STEPS;
 
 const MEDIA_UPLOAD_CONFIG = {
   customer: {
@@ -132,6 +166,46 @@ const createInitialFormState = () => ({
   },
 });
 
+function mapSection(template, source = {}) {
+  return Object.entries(template).reduce((acc, [key, defaultValue]) => {
+    const candidate = source[key];
+    if (candidate === null || candidate === undefined) {
+      acc[key] = defaultValue;
+      return acc;
+    }
+
+    if (typeof defaultValue === "number" || typeof candidate === "number") {
+      acc[key] = candidate;
+      return acc;
+    }
+
+    acc[key] = typeof candidate === "string" ? candidate : String(candidate);
+    return acc;
+  }, {});
+}
+
+function buildInitialFormStateFromLoan(loan) {
+  if (!loan) {
+    return createInitialFormState();
+  }
+
+  const base = createInitialFormState();
+
+  return {
+    customerDetails: mapSection(base.customerDetails, loan.customerDetails),
+    businessDetails: mapSection(base.businessDetails, loan.businessDetails),
+    bankDetails: mapSection(base.bankDetails, loan.bankDetails),
+    loanDetails: {
+      ...base.loanDetails,
+      ...mapSection(base.loanDetails, loan.loanDetails),
+      loanType: loan.loanDetails?.loanType || base.loanDetails.loanType,
+    },
+    guarantorDetails: mapSection(base.guarantorDetails, loan.guarantorDetails),
+    pictures: mapSection(base.pictures, loan.pictures),
+    groupDetails: mapSection(base.groupDetails, loan.groupDetails),
+  };
+}
+
 const REQUIRED_FIELDS = [
   { section: "customerDetails", field: "firstName", label: "Customer first name" },
   { section: "customerDetails", field: "lastName", label: "Customer last name" },
@@ -154,11 +228,13 @@ const REQUIRED_FIELDS = [
   { section: "guarantorDetails", field: "yearsKnown", label: "Years known" },
 ];
 
-const STEP1_REQUIRED_FIELDS = REQUIRED_FIELDS.filter(({ section }) =>
-  ["customerDetails", "businessDetails", "guarantorDetails"].includes(section)
+const STEP1_REQUIRED_FIELDS = REQUIRED_FIELDS.filter(({ section }) => section === "customerDetails");
+
+const STEP2_REQUIRED_FIELDS = REQUIRED_FIELDS.filter(({ section }) =>
+  ["businessDetails", "guarantorDetails"].includes(section)
 );
 
-const STEP2_REQUIRED_FIELDS = REQUIRED_FIELDS.filter(({ section }) => section === "bankDetails");
+const STEP3_REQUIRED_FIELDS = REQUIRED_FIELDS.filter(({ section }) => section === "bankDetails");
 
 const LOAN_TYPES = [
   { value: "daily", label: "Daily" },
@@ -171,7 +247,7 @@ const CUSTOMER_FIELDS = [
   { key: "dateOfBirth", label: "Date of birth", type: "date" },
   { key: "phoneOne", label: "Phone number", type: "tel", placeholder: "0801 234 5678" },
   { key: "address", label: "Residential address", type: "text", colSpan: 2, placeholder: "Street, city, state" },
-  { key: "bvn", label: "BVN", type: "text", placeholder: "Enter BVN" },
+  { key: "bvn", label: "NIN", type: "text", placeholder: "Enter NIN" },
   { key: "NextOfKin", label: "Next of kin", type: "text", placeholder: "Next of kin name" },
   { key: "NextOfKinNumber", label: "Next of kin phone", type: "tel", placeholder: "0801 234 5678" },
 ];
@@ -182,7 +258,7 @@ const BUSINESS_FIELDS = [
   { key: "address", label: "Business address", type: "text", colSpan: 2, placeholder: "Shop address" },
   { key: "yearsHere", label: "Years at location", type: "number", min: 0, placeholder: "0" },
   { key: "nameKnown", label: "How well known is the name?", type: "text", placeholder: "Popular in the market" },
-  { key: "estimatedValue", label: "Estimated business value (₦)", type: "number", min: 0, placeholder: "Optional" },
+  { key: "estimatedValue", label: "Estimated business value (₦)", type: "number", min: 0, placeholder: "" },
 ];
 
 const GUARANTOR_FIELDS = [
@@ -202,8 +278,8 @@ const BANK_FIELDS = [
 const STATUS_BADGE_STYLES = {
   "waiting for approval": "bg-amber-500",
   approved: "bg-emerald-500",
-  "active loan": "bg-indigo-500",
-  "fully paid": "bg-teal-500",
+  "active loan": "bg-blue-500",
+  "fully paid": "bg-blue-900",
   rejected: "bg-rose-500",
   edited: "bg-slate-500",
 };
@@ -234,14 +310,89 @@ function toNumber(value) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function formatCurrencyValue(value) {
+  const number = toNumber(value);
+
+  if (number === undefined) {
+    return "—";
+  }
+
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(number);
+}
+
+function displayText(value) {
+  if (value === null || value === undefined) {
+    return "—";
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value)
+      ? new Intl.NumberFormat("en-NG", { maximumFractionDigits: 2 }).format(value)
+      : "—";
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : "—";
+  }
+
+  if (Array.isArray(value)) {
+    return value.length ? value.join(", ") : "—";
+  }
+
+  return String(value);
+}
+
+function ReviewSection({ title, description, onEdit, children }) {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+          {description && (
+            <p className="mt-1 text-sm text-slate-500">{description}</p>
+          )}
+        </div>
+        {onEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="self-start rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600"
+          >
+            Edit section
+          </button>
+        )}
+      </div>
+      <div className="mt-4 space-y-4">{children}</div>
+    </section>
+  );
+}
+
+function ReviewItem({ label, value, className = "" }) {
+  return (
+    <div
+      className={`rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 ${className}`}
+    >
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-900">{value ?? "—"}</p>
+    </div>
+  );
+}
+
 import { fetchCsoProfile } from "../../redux/slices/csoSlice";
 
 export default function CsoHome() {
   const dispatch = useDispatch();
-  const { loans, loading, submitting, error } = useSelector((state) => state.loan);
-  const { token } = useSelector((state) => state.csoAuth);
+  const { loans, loansPagination, loading, submitting, error } = useSelector((state) => state.loan);
+  const { token, cso: csoAuth } = useSelector((state) => state.csoAuth);
   const { profile: csoProfile } = useSelector((state) => state.cso);
   const { imageUploadLoading } = useSelector((state) => state.upload);
+  const { totalOutstanding } = useSelector((state) => state.loan);
 
   const [form, setForm] = useState(createInitialFormState);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -249,6 +400,8 @@ export default function CsoHome() {
   const [currentStep, setCurrentStep] = useState(1);
   const [activeUploadTarget, setActiveUploadTarget] = useState(null);
   const [loanStatusModal, setLoanStatusModal] = useState(null);
+  const [editingLoanSnapshot, setEditingLoanSnapshot] = useState(null);
+  const [editingLoanId, setEditingLoanId] = useState(null);
 
   // Floating Action Button State
   const [showFabMenu, setShowFabMenu] = useState(false);
@@ -275,7 +428,30 @@ export default function CsoHome() {
   const customerSignatureRef = useRef(null);
   const guarantorSignatureRef = useRef(null);
 
-  console.log(loans);
+  const [page, setPage] = useState(1);
+  const defaultPageSize = 16;
+  const [searchTerm, setSearchTerm] = useState("");
+  const [groupFilter, setGroupFilter] = useState("all");
+
+  useEffect(() => {
+    if (loansPagination?.page && loansPagination.page !== page) {
+      setPage(loansPagination.page);
+    }
+  }, [loansPagination?.page]);
+
+  const currentPageSize = loansPagination?.limit || defaultPageSize;
+
+  const effectiveFilterParams = useMemo(
+    () => ({
+      search: searchTerm.trim(),
+      groupId: groupFilter === "all" ? "" : groupFilter,
+    }),
+    [searchTerm, groupFilter]
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [effectiveFilterParams.search, effectiveFilterParams.groupId]);
 
   // Group Leader Handlers using Redux
   const handleGroupLeaderFormChange = (e) => {
@@ -328,6 +504,15 @@ export default function CsoHome() {
   const handleFabAction = (action) => {
     setShowFabMenu(false);
     if (action === 'loan') {
+      // Check if CSO has exceeded defaulting target before opening modal
+      const defaultingTarget = csoAuth?.defaultingTarget || 0;
+      if (defaultingTarget > 0 && totalOutstanding > defaultingTarget) {
+        toast.error(
+          `Cannot create loan: Your outstanding defaults (₦${totalOutstanding.toFixed(2)}) exceed your limit (₦${defaultingTarget.toFixed(2)})`,
+          { duration: 5000 }
+        );
+        return;
+      }
       setIsModalOpen(true);
     } else if (action === 'groupLeader') {
       setShowGroupLeaderModal(true);
@@ -336,11 +521,24 @@ export default function CsoHome() {
 
   useEffect(() => {
     if (token) {
-      dispatch(fetchCsoLoans());
       dispatch(fetchCsoProfile());
       dispatch(fetchMyApprovedGroupLeaders());
+      dispatch(fetchCsoOutstandingLoans()); // Fetch outstanding loans for validation
     }
-  }, [token]);
+  }, [token, dispatch]);
+
+  useEffect(() => {
+    if (token) {
+      dispatch(
+        fetchCsoLoans({
+          page,
+          limit: currentPageSize,
+          search: effectiveFilterParams.search,
+          groupId: effectiveFilterParams.groupId,
+        })
+      );
+    }
+  }, [token, page, currentPageSize, effectiveFilterParams.search, effectiveFilterParams.groupId, dispatch]);
 
   useEffect(() => {
     if (csoProfile) {
@@ -416,19 +614,7 @@ export default function CsoHome() {
     }));
   };
 
-  const step1Valid = useMemo(() => {
-    return STEP1_REQUIRED_FIELDS.every(({ section, field }) => {
-      const candidate = form[section]?.[field];
-      return typeof candidate === "string" ? candidate.trim().length > 0 : Boolean(candidate);
-    });
-  }, [form]);
-
-  const step2Valid = useMemo(() => {
-    const hasRequiredStrings = STEP2_REQUIRED_FIELDS.every(({ section, field }) => {
-      const candidate = form[section]?.[field];
-      return typeof candidate === "string" ? candidate.trim().length > 0 : Boolean(candidate);
-    });
-
+  const loanPayload = useMemo(() => {
     const amountRequested = toNumber(form.loanDetails.amountRequested);
     const businessYears = toNumber(form.businessDetails.yearsHere);
     const estimatedValue = toNumber(form.businessDetails.estimatedValue);
@@ -443,7 +629,7 @@ export default function CsoHome() {
       return acc;
     }, {});
 
-    const payload = {
+    return {
       customerDetails: {
         firstName: form.customerDetails.firstName.trim(),
         lastName: form.customerDetails.lastName.trim(),
@@ -490,6 +676,49 @@ export default function CsoHome() {
       },
       pictures: sanitizedPictures,
     };
+  }, [form]);
+
+  const step1Valid = useMemo(() => {
+    return STEP1_REQUIRED_FIELDS.every(({ section, field }) => {
+      const candidate = form[section]?.[field];
+      return typeof candidate === "string" ? candidate.trim().length > 0 : Boolean(candidate);
+    });
+  }, [form]);
+
+  const step2Valid = useMemo(() => {
+    const requiredComplete = STEP2_REQUIRED_FIELDS.every(({ section, field }) => {
+      const candidate = form[section]?.[field];
+      return typeof candidate === "string" ? candidate.trim().length > 0 : Boolean(candidate);
+    });
+
+    const yearsKnown = toNumber(form.guarantorDetails.yearsKnown);
+    const yearsHereValue = form.businessDetails.yearsHere;
+    const yearsHereNumber = toNumber(yearsHereValue);
+    const estimatedValue = form.businessDetails.estimatedValue;
+    const estimatedValueNumber = toNumber(estimatedValue);
+
+    const yearsHereValid =
+      yearsHereValue === "" || yearsHereNumber === undefined || yearsHereNumber >= 0;
+    const estimatedValid =
+      estimatedValue === "" || estimatedValueNumber === undefined || estimatedValueNumber >= 0;
+
+    return (
+      requiredComplete &&
+      yearsKnown !== undefined &&
+      yearsKnown >= 0 &&
+      yearsHereValid &&
+      estimatedValid
+    );
+  }, [form]);
+
+  const step3Valid = useMemo(() => {
+    const hasRequiredStrings = STEP3_REQUIRED_FIELDS.every(({ section, field }) => {
+      const candidate = form[section]?.[field];
+      return typeof candidate === "string" ? candidate.trim().length > 0 : Boolean(candidate);
+    });
+
+    const amountRequested = toNumber(form.loanDetails.amountRequested);
+    const yearsKnown = toNumber(form.guarantorDetails.yearsKnown);
 
     return (
       hasRequiredStrings &&
@@ -504,10 +733,10 @@ export default function CsoHome() {
     );
   }, [form]);
 
-  console.log(step1Valid, step2Valid);
   const isUploading = imageUploadLoading || Boolean(activeUploadTarget);
 
-  const isSubmitDisabled = submitting || isUploading || !step1Valid || !step2Valid;
+  const isSubmitDisabled =
+    submitting || isUploading || !step1Valid || !step2Valid || !step3Valid;
 
   const describeMissingStep1 = () => {
     const missing = STEP1_REQUIRED_FIELDS.filter(({ section, field }) => {
@@ -527,14 +756,71 @@ export default function CsoHome() {
       return !(typeof candidate === "string" ? candidate.trim().length > 0 : Boolean(candidate));
     });
 
+    const businessMissing = missing
+      .filter(({ section }) => section === "businessDetails")
+      .map(({ label }) => label);
+    const guarantorMissing = missing
+      .filter(({ section }) => section === "guarantorDetails")
+      .map(({ label }) => label);
+
+    const yearsKnown = toNumber(form.guarantorDetails.yearsKnown);
+    const yearsHereValue = form.businessDetails.yearsHere;
+    const yearsHereNumber = toNumber(yearsHereValue);
+    const estimatedValue = form.businessDetails.estimatedValue;
+    const estimatedValueNumber = toNumber(estimatedValue);
+
+    const messages = [];
+
+    if (businessMissing.length > 0) {
+      messages.push(`Business details: ${businessMissing.join(", ")}`);
+    }
+
+    if (guarantorMissing.length > 0) {
+      messages.push(`Guarantor details: ${guarantorMissing.join(", ")}`);
+    }
+
+    if (yearsHereValue && (yearsHereNumber === undefined || yearsHereNumber < 0)) {
+      messages.push("Business years at location must be zero or greater");
+    }
+
+    if (estimatedValue && (estimatedValueNumber === undefined || estimatedValueNumber < 0)) {
+      messages.push("Estimated business value must be zero or greater");
+    }
+
+    if (yearsKnown === undefined || yearsKnown < 0) {
+      messages.push("Guarantor years known must be zero or greater");
+    }
+
+    if (!messages.length) {
+      return null;
+    }
+
+    return messages.join(". ");
+  };
+
+  const describeMissingStep3 = () => {
+    const missing = STEP3_REQUIRED_FIELDS.filter(({ section, field }) => {
+      const candidate = form[section]?.[field];
+      return !(typeof candidate === "string" ? candidate.trim().length > 0 : Boolean(candidate));
+    });
+
     const uploadIssues = REQUIRED_UPLOAD_KEYS.filter((key) => !form.pictures[key]);
     const signatureMissing = !form.pictures.signature;
     const guarantorSignatureMissing = !form.guarantorDetails.signature;
+    const amountRequested = toNumber(form.loanDetails.amountRequested);
 
     const messages = [];
 
     if (missing.length > 0) {
       messages.push(`Bank details: ${missing.map(({ label }) => label).join(", ")}`);
+    }
+
+    if (!form.loanDetails.loanType) {
+      messages.push("Select a loan type");
+    }
+
+    if (!amountRequested || amountRequested <= 0) {
+      messages.push("Amount requested must be greater than zero");
     }
 
     if (uploadIssues.length > 0) {
@@ -574,16 +860,46 @@ export default function CsoHome() {
       setIsSubmittingFromModal(false);
       resetForm();
     }
+
+    setEditingLoanSnapshot(null);
+    setEditingLoanId(null);
   };
 
-  const openModal = () => {
+  const openModal = (initialFormState) => {
+    if (initialFormState) {
+      setForm(initialFormState);
+    }
     setIsModalOpen(true);
+  };
+
+  const beginLoanEdit = (loan) => {
+    if (!loan) {
+      return;
+    }
+
+    const initialState = buildInitialFormStateFromLoan(loan);
+    setEditingLoanSnapshot(loan);
+    setEditingLoanId(loan._id || loan.loanId || null);
+    setCurrentStep(1);
+    openModal(initialState);
   };
 
   const goToNextStep = () => {
     if (currentStep === 1 && !step1Valid) {
       const summary = describeMissingStep1();
-      toast.error(summary || "Fill in all required customer, business, and guarantor details before continuing");
+      toast.error(summary || "Fill in all required customer details before continuing");
+      return;
+    }
+
+    if (currentStep === 2 && !step2Valid) {
+      const summary = describeMissingStep2();
+      toast.error(summary || "Complete business and guarantor details before continuing");
+      return;
+    }
+
+    if (currentStep === 3 && !step3Valid) {
+      const summary = describeMissingStep3();
+      toast.error(summary || "Resolve outstanding fields before continuing to review");
       return;
     }
 
@@ -700,84 +1016,50 @@ export default function CsoHome() {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (currentStep !== TOTAL_STEPS) {
-      toast.error("Complete all steps before submitting");
+    if (currentStep !== REVIEW_STEP) {
+      goToNextStep();
       return;
     }
 
-    if (!step1Valid || !step2Valid) {
+    if (!step1Valid) {
+      const summary = describeMissingStep1();
+      toast.error(summary || "Fill in all required customer details before submitting");
+      setCurrentStep(1);
+      return;
+    }
+
+    if (!step2Valid) {
       const summary = describeMissingStep2();
-      toast.error(summary || "Resolve all outstanding fields before submitting");
+      toast.error(summary || "Complete business and guarantor details before submitting");
+      setCurrentStep(2);
       return;
     }
 
-    const amountRequested = toNumber(form.loanDetails.amountRequested);
-    const businessYears = toNumber(form.businessDetails.yearsHere);
-    const estimatedValue = toNumber(form.businessDetails.estimatedValue);
-    const amountToBePaid = toNumber(form.loanDetails.amountToBePaid);
-    const dailyAmount = toNumber(form.loanDetails.dailyAmount);
-    const yearsKnown = toNumber(form.guarantorDetails.yearsKnown);
+    if (!step3Valid) {
+      const summary = describeMissingStep3();
+      toast.error(summary || "Resolve bank, loan, and upload requirements before submitting");
+      setCurrentStep(3);
+      return;
+    }
 
-    const sanitizedPictures = Object.entries(form.pictures).reduce((acc, [key, value]) => {
-      if (typeof value === "string" && value.trim()) {
-        acc[key] = value.trim();
-      }
-      return acc;
-    }, {});
-
-    const payload = {
-      customerDetails: {
-        firstName: form.customerDetails.firstName.trim(),
-        lastName: form.customerDetails.lastName.trim(),
-        dateOfBirth: form.customerDetails.dateOfBirth.trim() || undefined,
-        phoneOne: form.customerDetails.phoneOne.trim(),
-        address: form.customerDetails.address.trim(),
-        bvn: form.customerDetails.bvn.trim(),
-        NextOfKin: form.customerDetails.NextOfKin.trim(),
-        NextOfKinNumber: form.customerDetails.NextOfKinNumber.trim(),
-      },
-      businessDetails: {
-        businessName: form.businessDetails.businessName.trim(),
-        natureOfBusiness: form.businessDetails.natureOfBusiness.trim(),
-        address: form.businessDetails.address.trim(),
-        nameKnown: form.businessDetails.nameKnown.trim(),
-        ...(businessYears !== undefined ? { yearsHere: businessYears } : {}),
-        ...(estimatedValue !== undefined ? { estimatedValue } : {}),
-      },
-      bankDetails: {
-        accountName: form.bankDetails.accountName.trim(),
-        bankName: form.bankDetails.bankName.trim(),
-        accountNo: form.bankDetails.accountNo.trim(),
-      },
-      loanDetails: {
-        amountRequested,
-        loanType: form.loanDetails.loanType,
-        ...(amountToBePaid !== undefined ? { amountToBePaid } : {}),
-        ...(dailyAmount !== undefined ? { dailyAmount } : {}),
-      },
-      guarantorDetails: {
-        name: form.guarantorDetails.name.trim(),
-        address: form.guarantorDetails.address.trim(),
-        phone: form.guarantorDetails.phone.trim(),
-        relationship: form.guarantorDetails.relationship.trim(),
-        yearsKnown,
-        signature: form.guarantorDetails.signature?.trim() || undefined,
-      },
-      groupDetails: {
-        groupId: form.groupDetails.groupId || undefined,
-        groupName: form.groupDetails.groupName?.trim() || undefined,
-        leaderName: form.groupDetails.leaderName?.trim() || undefined,
-        address: form.groupDetails.address?.trim() || undefined,
-        mobileNo: form.groupDetails.mobileNo?.trim() || undefined,
-      },
-      pictures: sanitizedPictures,
-    };
+    const isEditing = Boolean(editingLoanId);
+    const actionThunk = isEditing ? submitLoanEdit : submitLoan;
 
     try {
       setIsSubmittingFromModal(true);
-      await dispatch(submitLoan(payload)).unwrap();
-      toast.success("Loan submitted successfully");
+      if (isEditing) {
+        await dispatch(actionThunk({ loanId: editingLoanId, data: loanPayload })).unwrap();
+      } else {
+        await dispatch(actionThunk(loanPayload)).unwrap();
+      }
+      toast.success(
+        isEditing
+          ? "Edited loan resubmitted for approval"
+          : "Loan submitted successfully"
+      );
       closeModal();
+      setEditingLoanSnapshot(null);
+      setEditingLoanId(null);
     } catch (submissionError) {
       const message = typeof submissionError === "string" ? submissionError : "Unable to submit loan";
       toast.error(message);
@@ -825,6 +1107,20 @@ export default function CsoHome() {
       return;
     }
 
+    if (status === "edited") {
+      setLoanStatusModal({
+        title: "Edit requested",
+        message: loan.editedReason
+          ? `Admin feedback: ${loan.editedReason}`
+          : "Admin asked for corrections before approval.",
+        bvn: loan?.customerDetails?.bvn,
+        icon: <AlertCircle className="h-10 w-10 text-amber-500" />,
+        loanId: loan?._id,
+        context: "edit",
+      });
+      return;
+    }
+
     if (status === "active loan") {
       navigate(`/cso/loans/${loan._id}`);
       return;
@@ -841,6 +1137,59 @@ export default function CsoHome() {
     event.stopPropagation();
     if (!loan) {
       return;
+    }
+
+    // Check if CSO has exceeded defaulting target before allowing new loan
+    const defaultingTarget = csoAuth?.defaultingTarget || 0;
+    if (defaultingTarget > 0 && totalOutstanding > defaultingTarget) {
+      toast.error(
+        `Cannot create loan: Your outstanding defaults (₦${totalOutstanding.toFixed(2)}) exceed your limit (₦${defaultingTarget.toFixed(2)})`,
+        { duration: 5000 }
+      );
+      return;
+    }
+
+    // Check performance of the previous (fully paid) loan
+    // Count defaults (pending status) excluding the first scheduled day
+    const schedule = loan.repaymentSchedule || [];
+    const defaultsCount = schedule.filter((entry, index) => index > 0 && entry.status === "pending").length;
+
+    if (defaultsCount >= 3) {
+      const dailyPayments = loan.loanDetails?.dailyPayment || [];
+      
+      if (dailyPayments.length > 0) {
+        // Find the last payment date
+        // Assuming dailyPayment is chronological, but sorting ensures accuracy
+        const sortedPayments = [...dailyPayments].sort((a, b) => new Date(a.date) - new Date(b.date));
+        const lastPayment = sortedPayments[sortedPayments.length - 1];
+        const lastPaymentDate = new Date(lastPayment.date);
+
+        // Calculate wait days: 3 defaults -> 7 days, 4 -> 14 days, etc.
+        // Formula: (defaultsCount - 2) * 7
+        const waitDays = (defaultsCount - 2) * 7;
+        
+        const allowedDate = new Date(lastPaymentDate);
+        allowedDate.setDate(allowedDate.getDate() + waitDays);
+
+        // Normalize dates to midnight for accurate comparison
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        allowedDate.setHours(0, 0, 0, 0);
+
+        if (today < allowedDate) {
+          const formattedDate = allowedDate.toLocaleDateString(undefined, { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          });
+          
+          toast.error(
+            `Cannot create loan yet. Customer had ${defaultsCount} defaults. Eligibility date: ${formattedDate}`,
+            { duration: 6000 }
+          );
+          return;
+        }
+      }
     }
 
     navigate(`/cso/loans/${loan._id}/new-loan`, { state: { previousLoan: loan } });
@@ -886,7 +1235,7 @@ export default function CsoHome() {
             className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-full bg-white/90 px-2 py-2 text-xs uppercase tracking-wide shadow sm:px-3 sm:py-1"
             aria-label={`Loan status: ${statusLabel}`}
           >
-            <span className={`h-2.5 w-2.5 rounded-full ${statusClass}`} />
+            <span className={`h-3.5 w-3.5 rounded-full ${statusClass}`} />
             <span className="hidden font-semibold text-slate-700 sm:inline">{statusLabel}</span>
           </span>
         </div>
@@ -925,6 +1274,40 @@ export default function CsoHome() {
         </div>
       </article>
     );
+  };
+
+  const totalLoans = loansPagination?.total ?? loans.length;
+  const totalPages = Math.max(1, loansPagination?.totalPages ?? 1);
+  const canGoPrev = page > 1;
+  const canGoNext = page < totalPages;
+
+  const rangeStart = totalLoans === 0 ? 0 : (page - 1) * currentPageSize + 1;
+  const rangeEnd = totalLoans === 0 ? 0 : Math.min(totalLoans, rangeStart + loans.length - 1);
+
+  const handlePrevPage = () => {
+    setPage((prevPage) => Math.max(1, prevPage - 1));
+  };
+
+  const handleNextPage = () => {
+    setPage((prevPage) => Math.min(totalPages, prevPage + 1));
+  };
+
+  const handleGoToPage = (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const target = Number(formData.get("page"));
+
+    if (Number.isFinite(target) && target >= 1 && target <= totalPages) {
+      setPage(target);
+    }
+  };
+
+  const handleSearchChange = (event) => {
+    setSearchTerm(event.target.value);
+  };
+
+  const handleGroupFilterChange = (event) => {
+    setGroupFilter(event.target.value);
   };
 
   return (
@@ -983,8 +1366,60 @@ export default function CsoHome() {
               Fetching loans...
             </span>
           ) : (
-            <span>{loans.length} loan(s)</span>
+            <span>
+              {totalLoans === 0
+                ? "No loans found"
+                : `${loans.length.toLocaleString("en-NG")} loan(s) on this page • Total: ${totalLoans.toLocaleString("en-NG")}`}
+            </span>
           )}
+        </div>
+
+        <div className="grid gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-3">
+          <div className="sm:col-span-2 lg:col-span-1">
+            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500" htmlFor="loan-search">
+              Search loans
+            </label>
+            <div className="relative mt-2">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                id="loan-search"
+                type="search"
+                value={searchTerm}
+                onChange={handleSearchChange}
+                placeholder="Search by customer, loan ID, BVN, business..."
+                className="w-full rounded-lg border border-slate-200 py-2 pl-10 pr-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500" htmlFor="loan-group-filter">
+              Group leader
+            </label>
+            <div className="relative mt-2">
+              <select
+                id="loan-group-filter"
+                value={groupFilter}
+                onChange={handleGroupFilterChange}
+                className="w-full appearance-none rounded-lg border border-slate-200 py-2 pl-3 pr-8 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              >
+                <option value="all">All group leaders</option>
+                <option value="ungrouped">Ungrouped</option>
+                {groupLeaders.map((leader) => (
+                  <option key={leader._id} value={leader._id}>
+                    {leader.groupName || `${leader.firstName || ""} ${leader.lastName || ""}`.trim() || "Unnamed group"}
+                  </option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">▾</span>
+            </div>
+          </div>
+
+          <div className="sm:col-span-2 lg:col-span-1">
+            <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+              Use the filters to narrow loans on the current page. Navigate pages to review more results.
+            </div>
+          </div>
         </div>
 
         {loans.length === 0 && !loading ? (
@@ -993,8 +1428,53 @@ export default function CsoHome() {
             <p className="text-sm">Use the button above to submit your first loan.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-3 sm:gap-4 md:gap-6">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {loans.map(renderLoanCard)}
+          </div>
+        )}
+        {totalPages > 1 && (
+          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-slate-500">
+              Page <span className="font-semibold text-slate-700">{page}</span> of {totalPages.toLocaleString("en-NG")}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handlePrevPage}
+                disabled={!canGoPrev}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ArrowLeft className="h-4 w-4" /> Previous
+              </button>
+              <button
+                type="button"
+                onClick={handleNextPage}
+                disabled={!canGoNext}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next <ArrowRight className="h-4 w-4" />
+              </button>
+              <form className="flex items-center gap-2" onSubmit={handleGoToPage}>
+                <label htmlFor="goto-page" className="text-sm text-slate-500">
+                  Go to page
+                </label>
+                <input
+                  id="goto-page"
+                  name="page"
+                  type="number"
+                  min="1"
+                  max={totalPages}
+                  defaultValue={page}
+                  className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                />
+                <button
+                  type="submit"
+                  className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+                >
+                  Go
+                </button>
+              </form>
+            </div>
           </div>
         )}
       </section>
@@ -1024,6 +1504,20 @@ export default function CsoHome() {
                   <h3 className="text-lg font-semibold text-slate-900">{loanStatusModal.title}</h3>
                   <p className="mt-2 text-sm leading-relaxed">{loanStatusModal.message}</p>
                 </div>
+                {loanStatusModal.context === "edit" && (
+                  <div className="flex w-full flex-col gap-3">
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+                      onClick={() => {
+                        setLoanStatusModal(null);
+                        beginLoanEdit(editingLoanSnapshot || loans.find((loan) => loan._id === loanStatusModal.loanId));
+                      }}
+                    >
+                      <FileText className="h-4 w-4" /> Edit loan now
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1143,11 +1637,15 @@ export default function CsoHome() {
                           )}
                         </div>
                       </div>
+                    </div>
+                  )}
 
+                  {currentStep === 2 && (
+                    <div className="grid gap-6 lg:grid-cols-2">
                       <div className="space-y-4">
                         <div>
-                          <h2 className="text-lg font-semibold text-slate-900">Business & guarantor</h2>
-                          <p className="text-sm text-slate-500">Outline the business operations and provide guarantor support.</p>
+                          <h2 className="text-lg font-semibold text-slate-900">Business details</h2>
+                          <p className="text-sm text-slate-500">Outline the business operations and history.</p>
                         </div>
 
                         <div className="grid gap-4 sm:grid-cols-2">
@@ -1167,7 +1665,16 @@ export default function CsoHome() {
                               </label>
                             </div>
                           ))}
+                        </div>
+                      </div>
 
+                      <div className="space-y-4">
+                        <div>
+                          <h2 className="text-lg font-semibold text-slate-900">Guarantor details</h2>
+                          <p className="text-sm text-slate-500">Provide guarantor contacts and relationship.</p>
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2">
                           {GUARANTOR_FIELDS.map((field) => (
                             <div key={field.key} className={field.colSpan ? "sm:col-span-2" : undefined}>
                               <label className="flex flex-col gap-2 text-sm font-medium text-slate-700" htmlFor={`guarantor-${field.key}`}>
@@ -1189,7 +1696,7 @@ export default function CsoHome() {
                     </div>
                   )}
 
-                  {currentStep === 2 && (
+                  {currentStep === 3 && (
                     <div className="grid gap-6 lg:grid-cols-2">
                       <div className="space-y-4">
                         <div>
@@ -1459,6 +1966,131 @@ export default function CsoHome() {
                     </div>
                   )}
 
+                  {currentStep === REVIEW_STEP && (
+                    <div className="space-y-6">
+                      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+                        <h2 className="text-lg font-semibold text-slate-900">Review loan application</h2>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Confirm each section. Use the edit buttons to jump back and adjust any information.
+                        </p>
+                      </div>
+
+                      <div className="space-y-4">
+                        <ReviewSection
+                          title="Customer & group"
+                          description="Personal details and group affiliation"
+                          onEdit={() => setCurrentStep(1)}
+                        >
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <ReviewItem label="First name" value={displayText(loanPayload.customerDetails.firstName)} />
+                            <ReviewItem label="Last name" value={displayText(loanPayload.customerDetails.lastName)} />
+                            <ReviewItem label="Date of birth" value={displayText(loanPayload.customerDetails.dateOfBirth)} />
+                            <ReviewItem label="Phone" value={displayText(loanPayload.customerDetails.phoneOne)} />
+                            <ReviewItem label="Address" value={displayText(loanPayload.customerDetails.address)} className="sm:col-span-2" />
+                            <ReviewItem label="NIN" value={displayText(loanPayload.customerDetails.bvn)} />
+                            <ReviewItem label="Next of kin" value={displayText(loanPayload.customerDetails.NextOfKin)} />
+                            <ReviewItem label="Next of kin phone" value={displayText(loanPayload.customerDetails.NextOfKinNumber)} />
+                            <ReviewItem label="Group" value={displayText(loanPayload.groupDetails.groupName)} />
+                            <ReviewItem label="Group leader" value={displayText(loanPayload.groupDetails.leaderName)} />
+                          </div>
+                        </ReviewSection>
+
+                        <ReviewSection
+                          title="Business & guarantor"
+                          description="Operational summary and guarantor"
+                          onEdit={() => setCurrentStep(2)}
+                        >
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <ReviewItem label="Business name" value={displayText(loanPayload.businessDetails.businessName)} />
+                            <ReviewItem label="Nature of business" value={displayText(loanPayload.businessDetails.natureOfBusiness)} />
+                            <ReviewItem label="Business address" value={displayText(loanPayload.businessDetails.address)} className="sm:col-span-2" />
+                            <ReviewItem label="Years at location" value={displayText(loanPayload.businessDetails.yearsHere)} />
+                            <ReviewItem label="Name recognition" value={displayText(loanPayload.businessDetails.nameKnown)} />
+                            <ReviewItem label="Estimated value" value={formatCurrencyValue(loanPayload.businessDetails.estimatedValue)} />
+                            <ReviewItem label="Guarantor name" value={displayText(loanPayload.guarantorDetails.name)} />
+                            <ReviewItem label="Guarantor phone" value={displayText(loanPayload.guarantorDetails.phone)} />
+                            <ReviewItem label="Guarantor address" value={displayText(loanPayload.guarantorDetails.address)} className="sm:col-span-2" />
+                            <ReviewItem label="Relationship" value={displayText(loanPayload.guarantorDetails.relationship)} />
+                            <ReviewItem label="Years known" value={displayText(loanPayload.guarantorDetails.yearsKnown)} />
+                          </div>
+                        </ReviewSection>
+
+                        <ReviewSection
+                          title="Bank & loan details"
+                          description="Financial destination and request summary"
+                          onEdit={() => setCurrentStep(3)}
+                        >
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <ReviewItem label="Account name" value={displayText(loanPayload.bankDetails.accountName)} />
+                            <ReviewItem label="Bank name" value={displayText(loanPayload.bankDetails.bankName)} />
+                            <ReviewItem label="Account number" value={displayText(loanPayload.bankDetails.accountNo)} />
+                            <ReviewItem label="Loan type" value={displayText(loanPayload.loanDetails.loanType)} />
+                            <ReviewItem label="Amount requested" value={formatCurrencyValue(loanPayload.loanDetails.amountRequested)} />
+                            <ReviewItem label="Amount to be paid" value={formatCurrencyValue(loanPayload.loanDetails.amountToBePaid)} />
+                            <ReviewItem label="Daily/weekly amount" value={formatCurrencyValue(loanPayload.loanDetails.dailyAmount)} />
+                          </div>
+                        </ReviewSection>
+
+                        <ReviewSection
+                          title="Supporting documents"
+                          description="Uploaded media and signatures"
+                          onEdit={() => setCurrentStep(3)}
+                        >
+                          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                            {MEDIA_UPLOAD_KEYS.map((key) => {
+                              const config = MEDIA_UPLOAD_CONFIG[key];
+                              const currentUrl = loanPayload.pictures[key];
+
+                              return (
+                                <div key={key} className="space-y-3 rounded-2xl border border-slate-200 p-4">
+                                  <div>
+                                    <p className="text-sm font-semibold text-slate-800">{config.label}</p>
+                                    <p className="text-xs text-slate-500">{config.description}</p>
+                                  </div>
+
+                                  {currentUrl ? (
+                                    <div className="space-y-2">
+                                      <div className="overflow-hidden rounded-xl border border-slate-200">
+                                        <img
+                                          src={resolveAssetUrl(currentUrl)}
+                                          alt={`${config.label} upload`}
+                                          className="h-32 w-full object-cover"
+                                        />
+                                      </div>
+                                      <span className="block text-[11px] text-slate-500">Uploaded</span>
+                                    </div>
+                                  ) : (
+                                    <div className="rounded-xl border border-dashed border-rose-300 bg-rose-50/60 p-4 text-center text-xs text-rose-500">
+                                      Missing upload
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                            <div className="space-y-3 rounded-2xl border border-slate-200 p-4">
+                              <p className="text-sm font-semibold text-slate-800">Customer signature</p>
+                              {loanPayload.pictures.signature ? (
+                                <span className="text-xs text-slate-500">Captured</span>
+                              ) : (
+                                <span className="text-xs text-rose-500">Missing signature upload</span>
+                              )}
+                            </div>
+
+                            <div className="space-y-3 rounded-2xl border border-slate-200 p-4">
+                              <p className="text-sm font-semibold text-slate-800">Guarantor signature</p>
+                              {loanPayload.guarantorDetails.signature ? (
+                                <span className="text-xs text-slate-500">Captured</span>
+                              ) : (
+                                <span className="text-xs text-rose-500">Missing signature upload</span>
+                              )}
+                            </div>
+                          </div>
+                        </ReviewSection>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-between">
                     <span className="text-sm text-slate-500">Form amount is automatically set to ₦2,000 for every loan.</span>
                     <div className="flex flex-wrap items-center gap-3">
@@ -1472,7 +2104,7 @@ export default function CsoHome() {
                       </button>
 
                       <div className="flex items-center gap-3">
-                        {currentStep > 1 && (
+                        {currentStep > 1 && currentStep !== REVIEW_STEP && (
                           <button
                             type="button"
                             onClick={goToPreviousStep}

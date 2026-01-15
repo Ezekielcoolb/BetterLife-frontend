@@ -1,9 +1,13 @@
 import { useMemo, useState } from "react";
 import BranchTarget from "./Branch/BranchTarget";
+import CsoDefaultingTarget from "./csoSettings/CsoDefaultingTarget";
+import InterestManager from "./interestSettings/InterestManager";
 
 const tabs = [
   { id: "security", label: "Security" },
   { id: "branch", label: "Branch Targets" },
+  { id: "cso-defaulting", label: "CSO Defaults Limit" },
+  { id: "interest", label: "Interest" },
 ];
 
 const initialSecurityForm = {
@@ -144,7 +148,10 @@ const Setting = () => {
         </div>
 
         <div className="pt-6">
-          {activeTab === "security" ? renderSecurityTab() : <BranchTarget />}
+          {activeTab === "security" && renderSecurityTab()}
+          {activeTab === "branch" && <BranchTarget />}
+          {activeTab === "cso-defaulting" && <CsoDefaultingTarget />}
+          {activeTab === "interest" && <InterestManager />}
         </div>
       </section>
     </div>

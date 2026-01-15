@@ -34,9 +34,17 @@ export default function AllLoans() {
       </div>
 
       {/* Tab Content */}
-      {activeTab === "cso" && <CsoLoans />}
-      {activeTab === "customer" && <CustomerLoans />}
-      {activeTab === "overdue" && <OverdueLoans />}
+      <div className="mt-6 space-y-6">
+        <div className={activeTab === "cso" ? "block" : "hidden"}>
+          <CsoLoans />
+        </div>
+        <div className={activeTab === "customer" ? "block" : "hidden"}>
+          <CustomerLoans />
+        </div>
+        <div className={activeTab === "overdue" ? "block" : "hidden"}>
+          <OverdueLoans />
+        </div>
+      </div>
     </div>
   );
 }

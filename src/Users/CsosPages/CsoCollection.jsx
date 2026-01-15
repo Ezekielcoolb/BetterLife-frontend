@@ -5,6 +5,7 @@ import { CalendarIcon, Loader2, RefreshCw, Search, Upload, AlertTriangle, CheckC
 import toast from "react-hot-toast";
 import { clearLoanError, fetchCsoCollection, fetchCsoFormCollection } from "../../redux/slices/loanSlice";
 import { fetchCsoProfile, postCsoRemittance, clearCsoError, resetRemittanceSuccess } from "../../redux/slices/csoSlice";
+import { fetchMyApprovedGroupLeaders } from "../../redux/slices/groupLeaderSlice";
 import { uploadImages, resetUpload } from "../../redux/slices/uploadSlice";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
@@ -150,12 +151,18 @@ export default function CsoCollection() {
     target: uploadTarget
   } = useSelector((state) => state.upload);
 
+  const {
+    items: groupLeaders,
+    loading: groupLeadersLoading
+  } = useSelector((state) => state.groupLeader);
+
   const [selectedDate, setSelectedDate] = useState(() => {
     const today = new Date();
     return today.toISOString().slice(0, 10);
   });
 
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedGroupLeader, setSelectedGroupLeader] = useState("all");
   
   // Remittance State
   const [showRemittanceModal, setShowRemittanceModal] = useState(false);
@@ -179,7 +186,9 @@ export default function CsoCollection() {
   const [activeActionMenu, setActiveActionMenu] = useState(null);
 
   const displayDate = collectionDate || selectedDate;
-  const totalCollectionValue = (collectionSummary.totalPaidToday || 0) + (formCollectionSummary.totalFormAmount || 0);
+  const totalCollectionValue =
+    (collectionSummary.totalPaidToday || 0) +
+    (formCollectionSummary.totalLoanAppForm || 0);
   const totalCollectionForDay = formatCurrency(totalCollectionValue);
 
   const getTodayRemittanceStatus = () => {
@@ -209,10 +218,7 @@ export default function CsoCollection() {
 
   useEffect(() => {
     dispatch(fetchCsoProfile());
-  }, [dispatch]);
-
-  useEffect(() => {
-    dispatch(fetchCsoProfile());
+    dispatch(fetchMyApprovedGroupLeaders());
   }, [dispatch]);
 
   useEffect(() => {
@@ -349,20 +355,40 @@ export default function CsoCollection() {
   const navigate = useNavigate();
 
   const filteredRecords = useMemo(() => {
-    const normalizedSearch = searchTerm.trim().toLowerCase();
+    let records = collectionRecords;
 
-    if (!normalizedSearch) {
-      return collectionRecords;
+    // Filter by group leader first
+    if (selectedGroupLeader !== "all") {
+      records = records.filter((record) => {
+        // We compare against the leaderName or groupName
+        // Based on implementation plan, we want to filter using the group leader
+        return record.leaderName === selectedGroupLeader;
+      });
     }
 
-    return collectionRecords.filter((record) => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    if (!normalizedSearch) {
+      return records;
+    }
+
+    return records.filter((record) => {
       const customerName = record.customerName?.toLowerCase() || "";
       const loanId = record.loanId?.toLowerCase() || "";
       const status = record.collectionStatus?.toLowerCase() || "";
 
       return customerName.includes(normalizedSearch) || loanId.includes(normalizedSearch) || status.includes(normalizedSearch);
     });
-  }, [collectionRecords, searchTerm]);
+  }, [collectionRecords, searchTerm, selectedGroupLeader]);
+
+  const filteredFormRecords = useMemo(() => {
+    let records = formCollectionRecords;
+
+    if (selectedGroupLeader !== "all") {
+      records = records.filter((record) => record.leaderName === selectedGroupLeader);
+    }
+
+    return records;
+  }, [formCollectionRecords, selectedGroupLeader]);
 
   const handleDateChange = (event) => {
     setSelectedDate(event.target.value);
@@ -467,8 +493,8 @@ export default function CsoCollection() {
     <div className="space-y-6 relative">
       {/* Yesterday's Modal */}
       {showYesterdayModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-x-0 top-0 bottom-[5.5rem] z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4 py-8 sm:inset-0 sm:bottom-0 sm:p-6">
+          <div className="max-h-full w-full max-w-md overflow-y-auto rounded-3xl bg-white p-6 shadow-xl">
             <div className="mb-4 flex items-center gap-3 text-amber-600">
                 <AlertTriangle className="h-8 w-8" />
                 <h2 className="text-xl font-bold">Action Required</h2>
@@ -550,8 +576,8 @@ export default function CsoCollection() {
 
       {/* Today's Remittance Modal */}
       {showRemittanceModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-x-0 top-0 bottom-[5.5rem] z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4 py-8 sm:inset-0 sm:bottom-0 sm:p-6">
+          <div className="max-h-full w-full max-w-md overflow-y-auto rounded-3xl bg-white p-6 shadow-xl">
             <div className="mb-6 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-slate-900">Remit Collection</h2>
                 {todayStatus.status !== 'partial' && (
@@ -703,7 +729,7 @@ export default function CsoCollection() {
             </div>
             <div className="rounded-2xl bg-slate-50 px-4 py-3">
               <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">Forms collected</dt>
-              <dd className="text-lg font-semibold text-indigo-600">{formatCurrency(formCollectionSummary.totalFormAmount || 0)}</dd>
+              <dd className="text-lg font-semibold text-indigo-600">{formatCurrency(formCollectionSummary.totalLoanAppForm || 0)}</dd>
             </div>
             <div className="rounded-2xl bg-indigo-50 px-4 py-3">
               <dt className="text-xs font-semibold uppercase tracking-wide text-indigo-400">Total collection</dt>
@@ -715,15 +741,33 @@ export default function CsoCollection() {
 
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2">
-            <Search className="h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by customer, status or loan ID"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              className="w-full border-none bg-transparent text-sm text-slate-600 focus:outline-none"
-            />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2">
+              <Search className="h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by customer, status or loan ID"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                className="w-full border-none bg-transparent text-sm text-slate-600 focus:outline-none"
+              />
+            </div>
+            
+            <div className="flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2">
+               <span className="text-sm text-slate-400 whitespace-nowrap">Group Leader:</span>
+               <select
+                 value={selectedGroupLeader}
+                 onChange={(e) => setSelectedGroupLeader(e.target.value)}
+                 className="w-full border-none bg-transparent text-sm font-semibold text-slate-700 focus:outline-none"
+               >
+                 <option value="all">All Groups</option>
+                 {groupLeaders.map((leader) => (
+                   <option key={leader._id} value={`${leader.firstName} ${leader.lastName}`}>
+                     {leader.firstName} {leader.lastName} ({leader.groupName})
+                   </option>
+                 ))}
+               </select>
+            </div>
           </div>
           <p className="text-xs text-slate-500">Showing {filteredRecords.length} of {collectionRecords.length} record(s)</p>
         </div>
@@ -823,7 +867,7 @@ export default function CsoCollection() {
             <p className="text-sm text-slate-500">Customers whose forms were collected on {displayDate}.</p>
           </div>
           <div className="text-sm text-slate-500">
-            Total forms collected: <span className="font-semibold text-indigo-600">{formatCurrency(formCollectionSummary.totalFormAmount || 0)}</span>
+            Total forms collected: <span className="font-semibold text-indigo-600">{formatCurrency(formCollectionSummary.totalLoanAppForm || 0)}</span>
           </div>
         </div>
 
@@ -846,7 +890,7 @@ export default function CsoCollection() {
                 </tr>
               )}
 
-              {!formCollectionLoading && formCollectionRecords.length === 0 && (
+              {!formCollectionLoading && filteredFormRecords.length === 0 && (
                 <tr>
                   <td colSpan={2} className="px-4 py-8 text-center text-slate-500">
                     No form collections recorded for this day.
@@ -855,13 +899,13 @@ export default function CsoCollection() {
               )}
 
               {!formCollectionLoading &&
-                formCollectionRecords.map((record) => (
+                filteredFormRecords.map((record) => (
                   <tr key={record.loanId} className="text-slate-700">
                     <td className="px-4 py-3">
                       <div className="font-semibold text-slate-900">{record.customerName || "Unnamed customer"}</div>
                       <p className="text-xs text-slate-500">{record.loanId}</p>
                     </td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-900">{formatCurrency(record.formAmount || 0)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-slate-900">{formatCurrency(record.loanAppForm || 0)}</td>
                   </tr>
                 ))}
             </tbody>
