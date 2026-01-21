@@ -16,16 +16,24 @@ const MEDIA_UPLOAD_CONFIG = {
     label: "Customer photo",
     description: "Upload a clear photo of the borrower.",
     folder: "customer",
+    accept: "image/*",
+    capture: "environment",
+    helperText: "Tap to snap a photo",
   },
   business: {
     label: "Business photo",
     description: "Show the business location or assets.",
     folder: "business",
+    accept: "image/*",
+    capture: "environment",
+    helperText: "Tap to capture business photo",
   },
   disclosure: {
     label: "Disclosure document",
     description: "Upload the signed disclosure form.",
     folder: "disclosure",
+    accept: "image/*,application/pdf",
+    helperText: "Upload photo or PDF document",
   },
 };
 
@@ -532,6 +540,8 @@ export default function MinimalLoanForm() {
         accountNo: form.bankDetails.accountNo.trim(),
       },
       loanDetails: {
+        loanAppForm: 1500,
+        insurranceFee: 2000,
         amountRequested,
         loanType: form.loanDetails.loanType,
         ...(amountToBePaid !== undefined ? { amountToBePaid } : {}),
@@ -830,10 +840,11 @@ export default function MinimalLoanForm() {
                       <label className="flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center transition hover:border-indigo-400 hover:bg-indigo-50">
                         <Upload className="h-4 w-4 text-indigo-500" />
                         <span className="text-xs font-semibold text-indigo-600">Click to upload</span>
-                        <span className="text-[11px] text-slate-500">JPG, PNG, or PDF</span>
+                        <span className="text-[11px] text-slate-500">{config.helperText || "Upload supported file"}</span>
                         <input
                           type="file"
-                          accept="image/*,application/pdf"
+                          accept={config.accept || "image/*,application/pdf"}
+                          capture={config.capture}
                           className="hidden"
                           onChange={(event) => handleUpload(event, key, config.folder)}
                           disabled={isUploading || submitting}

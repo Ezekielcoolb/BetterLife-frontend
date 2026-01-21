@@ -13,9 +13,11 @@ export const uploadImages = createAsyncThunk(
         const formData = new FormData();
         formData.append("file", file);
 
+        const token = localStorage.getItem("csoToken");
         const response = await axios.post(`${API_BASE_URL}/api/fileupload/${folderName}`, formData, {
           headers: {
             "Content-Type": "multipart/form-data",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
         });
 

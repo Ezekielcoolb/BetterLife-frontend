@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   TriangleAlert,
   Wand2,
+  X,
 } from "lucide-react";
 
 const formatCurrency = (value) => {
@@ -49,7 +50,7 @@ const formatDateTime = (value) => {
 const STATUS_STYLES = {
   issue: "bg-rose-100 text-rose-700 border border-rose-200",
   resolved: "bg-emerald-100 text-emerald-700 border border-emerald-200",
-  balanced: "bg-slate-100 text-slate-600 border border-slate-200",
+  balanced: "bg-emerald-100 text-emerald-700 border border-emerald-200",
 };
 
 const ZERO_THRESHOLD = 0.5; // treat differences within ₦0.50 as balanced
@@ -99,6 +100,7 @@ export default function AdminRemittance() {
   const [rangePreset, setRangePreset] = useState(lastQuery?.range || "month");
   const [customFrom, setCustomFrom] = useState(lastQuery?.from || "");
   const [customTo, setCustomTo] = useState(lastQuery?.to || "");
+
   const [customDate, setCustomDate] = useState(lastQuery?.date || "");
   const [currentMonth, setCurrentMonth] = useState(initialMonth);
   const appliedQueryRef = useRef(lastQuery);
@@ -609,42 +611,42 @@ export default function AdminRemittance() {
 
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
-              <tr>
-                <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  CSO
-                </th>
-                <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Date Submitted
-                </th>
-                <th className="whitespace-nowrap px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Amount Collected
-                </th>
-                <th className="whitespace-nowrap px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Amount Paid
-                </th>
-                <th className="whitespace-nowrap px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Amount Remitted
-                </th>
-                <th className="whitespace-nowrap px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Amount on Teller
-                </th>
-                <th className="whitespace-nowrap px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Difference
-                </th>
-                <th className="whitespace-nowrap px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Evidence
-                </th>
-                <th className="whitespace-nowrap px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Status
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Resolution Note
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Actions
-                </th>
-              </tr>
-            </thead>
+                <tr className="bg-slate-50/50">
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    CSO Details
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    DateTime
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Expected
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Paid / Remitted
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    On Teller
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Difference
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Proof
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Remark
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Resolution
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Action
+                  </th>
+                </tr>
+              </thead>
             <tbody className="divide-y divide-slate-100">
               {items.length === 0 && !loading ? (
                 <tr>
@@ -656,63 +658,72 @@ export default function AdminRemittance() {
                   </td>
                 </tr>
               ) : (
-                items.map((record) => {
-                  const edits = editingRows[record.id] || {};
-                  const difference =
-                    Number(record.amountRemitted || 0) -
-                    Number(record.amountOnTeller || 0);
+                items.flatMap((record) => {
+                  const partials = record.partialSubmissions && record.partialSubmissions.length > 0
+                    ? record.partialSubmissions
+                    : [];
+                  const hasPartials = partials.length > 0;
+                  const rowSpan = hasPartials ? partials.length : 1;
+
+                  // Legacy fallback for amountCollected
+                  const effectiveAmountCollected = Number(record.amountCollected || record.amount || 0);
+                  
+                  // Difference calculation (User intent: Shortfall from expected)
+                  const difference = effectiveAmountCollected - Number(record.amountRemitted || 0);
                   const differenceLabel = formatCurrency(difference);
+                  
+                  // Verification Status (for Remark/Styles)
+                  const tellerDiff = Math.abs(Number(record.amountRemitted || 0) - Number(record.amountOnTeller || 0));
+                  const isVerified = tellerDiff <= 0.5;
+
                   const hasIssue = Math.abs(difference) > ZERO_THRESHOLD;
                   const status = hasIssue
                     ? record.resolvedIssue
                       ? "resolved"
                       : "issue"
-                    : record.resolvedIssue
-                    ? "resolved"
                     : "balanced";
-                  const statusClass = STATUS_STYLES[status] || STATUS_STYLES.balanced;
+                  
+                  const edits = editingRows[record.id] || {};
 
-                  return (
-                    <tr key={record.id} className="hover:bg-slate-50/70">
-                      <td className="px-4 py-3">
+                  // Common Cells Logic
+                  const renderCommonCells = () => (
+                    <>
+                      <td rowSpan={rowSpan} className="px-4 py-3 align-top">
                         <div className="font-medium text-slate-900">{record.csoName}</div>
                         <div className="text-xs text-slate-500">{record.branch}</div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">
-                        <div>{formatDateTime(record.date)}</div>
-                        <div className="text-xs text-slate-400">
-                          Submitted {formatDateTime(record.submittedAt)}
-                        </div>
+                      <td rowSpan={rowSpan} className="px-4 py-3 align-top text-center">
+                          <span
+                          className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-semibold ${STATUS_STYLES[status] || STATUS_STYLES.balanced}`}
+                          >
+                          {status === "issue" && <TriangleAlert className="h-3 w-3" />}
+                          {status === "resolved" && <CheckCircle className="h-3 w-3" />}
+                          {status === "balanced" && <ShieldCheck className="h-3 w-3" />}
+                          {status === "issue" ? "Issue" : status === "resolved" ? "Resolved" : "Balanced"}
+                          </span>
                       </td>
-                      <td className="px-4 py-3 text-right font-medium text-slate-900">
-                        {formatCurrency(record.amountCollected)}
+                      <td rowSpan={rowSpan} className="px-4 py-3 align-top text-sm text-slate-600">
+                         <div>{formatDateTime(record.date)}</div>
+                         {record.submittedAt && (
+                           <div className="text-[10px] text-slate-400">Sub: {formatDateTime(record.submittedAt)}</div>
+                         )}
                       </td>
-                      <td className="px-4 py-3 text-right text-slate-600">
-                        {formatCurrency(record.amountPaid)}
+                      <td rowSpan={rowSpan} className="px-4 py-3 align-top text-right font-medium text-slate-900">
+                        {formatCurrency(effectiveAmountCollected)}
                       </td>
-                      <td className="px-4 py-3">
+                    </>
+                  );
+
+                   // Action/Verification Cells Logic
+                   const renderVerificationCells = () => (
+                    <>
+                       <td rowSpan={rowSpan} className="px-4 py-3 align-top">
                         <input
                           type="number"
                           step="0.01"
                           inputMode="decimal"
-                          className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-right text-sm shadow-sm focus:border-indigo-400 focus:outline-none"
-                          value={edits.amountRemitted ?? ""}
-                          onChange={(event) =>
-                            handleFieldChange(
-                              record.id,
-                              "amountRemitted",
-                              event.target.value
-                            )
-                          }
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="number"
-                          step="0.01"
-                          inputMode="decimal"
-                          className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-right text-sm shadow-sm focus:border-indigo-400 focus:outline-none"
-                          value={edits.amountOnTeller ?? ""}
+                          className="w-24 rounded-xl border border-slate-200 px-3 py-2 text-right text-sm shadow-sm focus:border-indigo-400 focus:outline-none"
+                          value={edits.amountOnTeller ?? record.amountOnTeller ?? ""}
                           onChange={(event) =>
                             handleFieldChange(
                               record.id,
@@ -722,85 +733,123 @@ export default function AdminRemittance() {
                           }
                         />
                       </td>
-                      <td className={`px-4 py-3 text-right text-sm font-semibold ${hasIssue ? "text-rose-600" : "text-emerald-600"}`}>
+                      <td rowSpan={rowSpan} className={`px-4 py-3 align-top text-right text-sm font-semibold ${Math.abs(difference) > 0.5 ? "text-rose-600" : "text-emerald-600"}`}>
                         {differenceLabel}
                       </td>
+                   </>
+                   );
+                   
+                   const renderResolutionCells = () => (
+                      <>
+                        <td rowSpan={rowSpan} className="px-4 py-3 align-top text-center">
+                            <div className={`max-w-[120px] truncate text-[10px] font-medium ${isVerified ? "text-emerald-600" : "text-rose-500"}`}>
+                                {record.remark || (isVerified ? "Balanced" : "Teller Mismatch")}
+                            </div>
+                        </td>
+                        <td rowSpan={rowSpan} className="px-4 py-3 align-top">
+                            <textarea
+                            rows={1}
+                            className="w-40 resize-none rounded-xl border border-slate-200 px-2 py-1 text-xs text-slate-600 shadow-sm focus:border-indigo-400 focus:outline-none"
+                            placeholder="Note..."
+                            value={edits.resolutionNote ?? (record.resolvedIssue || record.issueResolution || "")}
+                            onChange={(event) =>
+                                handleFieldChange(
+                                record.id,
+                                "resolutionNote",
+                                event.target.value
+                                )
+                            }
+                            ></textarea>
+                        </td>
+                        <td rowSpan={rowSpan} className="px-4 py-3 align-top">
+                             <div className="flex flex-col gap-1.5 text-[10px]">
+                                <button
+                                    type="button"
+                                    onClick={() => handleSaveRow(record)}
+                                    disabled={isRowUpdating(record.id)}
+                                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-2.5 py-1.5 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-400"
+                                >
+                                    {isRowUpdating(record.id) && (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    )}
+                                    Update
+                                </button>
+                                {status === "issue" && (
+                                    <button
+                                    type="button"
+                                    onClick={() => handleResolveRow(record)}
+                                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 font-semibold text-emerald-600 transition hover:bg-emerald-100"
+                                    >
+                                    <CheckCircle className="h-3 w-3" /> Resolve
+                                    </button>
+                                )}
+                            </div>
+                        </td>
+                      </>
+                   );
+
+                  if (hasPartials) {
+                    return partials.map((partial, index) => {
+                      const isFirst = index === 0;
+                      return (
+                        <tr key={partial._id || `${record.id}-partial-${index}`} className="hover:bg-slate-50/70">
+                          {isFirst && renderCommonCells()}
+                          
+                           <td className="px-4 py-3 text-right">
+                             <div className="font-semibold text-slate-700">{formatCurrency(partial.amount)}</div>
+                             <div className="text-[10px] text-slate-400">{formatDateTime(partial.submittedAt)}</div>
+                           </td>
+
+                           {isFirst && renderVerificationCells()}
+
+                           <td className="px-4 py-3 text-center">
+                            {partial.image ? (
+                              <a
+                                href={partial.image}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-[10px] font-medium text-indigo-600 transition hover:bg-indigo-100"
+                              >
+                                <ImageIcon className="h-3 w-3" /> View
+                              </a>
+                            ) : (
+                              <span className="text-xs text-slate-400">—</span>
+                            )}
+                           </td>
+
+                           {isFirst && renderResolutionCells()}
+                        </tr>
+                      );
+                    });
+                  }
+
+                  // Single Record
+                  return (
+                    <tr key={record.id} className="hover:bg-slate-50/70">
+                      {renderCommonCells()}
+                      
+                      <td className="px-4 py-3 text-right text-slate-700 font-semibold">
+                        {formatCurrency(record.amountPaid)}
+                      </td>
+
+                      {renderVerificationCells()}
+                      
                       <td className="px-4 py-3 text-center">
                         {record.image ? (
                           <a
                             href={record.image}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-600 transition hover:bg-indigo-100"
+                            className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-[10px] font-medium text-indigo-600 transition hover:bg-indigo-100"
                           >
-                            <ImageIcon className="h-3.5 w-3.5" /> View
+                            <ImageIcon className="h-3 w-3" /> View
                           </a>
                         ) : (
                           <span className="text-xs text-slate-400">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${statusClass}`}
-                        >
-                          {status === "issue" && <TriangleAlert className="h-3.5 w-3.5" />}
-                          {status === "resolved" && <CheckCircle className="h-3.5 w-3.5" />}
-                          {status === "balanced" && <ShieldCheck className="h-3.5 w-3.5" />}
-                          {status === "issue" ? "Issue" : status === "resolved" ? "Resolved" : "Balanced"}
-                        </span>
-                        {record.resolvedIssue && (
-                          <p className="mt-1 text-xs text-slate-400">
-                            {record.resolvedIssue}
-                          </p>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <textarea
-                          rows={2}
-                          className="w-48 resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 shadow-sm focus:border-indigo-400 focus:outline-none"
-                          placeholder="Add resolution note"
-                          value={edits.resolutionNote ?? ""}
-                          onChange={(event) =>
-                            handleFieldChange(
-                              record.id,
-                              "resolutionNote",
-                              event.target.value
-                            )
-                          }
-                        ></textarea>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col gap-2 text-xs">
-                          <button
-                            type="button"
-                            onClick={() => handleSaveRow(record)}
-                            disabled={isRowUpdating(record.id)}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-400"
-                          >
-                            {isRowUpdating(record.id) && (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            )}
-                            Update
-                          </button>
-                          {status === "issue" ? (
-                            <button
-                              type="button"
-                              onClick={() => handleResolveRow(record)}
-                              className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 font-semibold text-emerald-600 transition hover:bg-emerald-100"
-                            >
-                              <CheckCircle className="h-3.5 w-3.5" /> Mark Resolved
-                            </button>
-                          ) : record.resolvedIssue ? (
-                            <button
-                              type="button"
-                              onClick={() => handleClearResolution(record)}
-                              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 font-semibold text-slate-500 transition hover:border-rose-200 hover:text-rose-600"
-                            >
-                              Clear Resolution
-                            </button>
-                          ) : null}
-                        </div>
-                      </td>
+
+                      {renderResolutionCells()}
                     </tr>
                   );
                 })
@@ -853,6 +902,7 @@ export default function AdminRemittance() {
           </div>
         </footer>
       </section>
+
     </div>
   );
 }

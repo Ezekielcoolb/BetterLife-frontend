@@ -23,7 +23,7 @@ const primaryNav = [
     to: "/admin/dashboard",
     icon: LayoutDashboard,
   },
-    {
+  {
     label: "CSOs",
     to: "/admin/cso",
     icon: UserCircle2,
@@ -154,9 +154,10 @@ function SidebarSection({ title, items, onNavigate }) {
   );
 }
 
-export default function AdminSidebar({ isOpen = false, onClose }) {
+export default function AdminSidebar({ isOpen = false, onClose, admin }) {
   const [operationsOpen, setOperationsOpen] = useState(false);
   const [reportsOpen, setReportsOpen] = useState(false);
+  const adminLabel = admin?.email || "Admin";
 
   return (
     <>
@@ -176,11 +177,11 @@ export default function AdminSidebar({ isOpen = false, onClose }) {
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-5">
             <div className="flex items-center gap-2">
               <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                LS
+                BL
               </span>
               <div>
-                <p className="text-base font-semibold text-slate-900">LoanSphere</p>
-                <p className="text-xs text-slate-500">Admin Console</p>
+                <p className="text-base font-semibold text-slate-900">BetterLife Loans</p>
+                <p className="text-xs text-slate-500">{adminLabel}</p>
               </div>
             </div>
             <button
@@ -282,16 +283,15 @@ export default function AdminSidebar({ isOpen = false, onClose }) {
 
           <div className="border-t border-slate-200 px-4 py-5">
             <div className="rounded-lg bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-700">Upgrade Insights</p>
+              <p className="text-sm font-semibold text-slate-700">BetterLife Loans</p>
               <p className="mt-1 text-xs text-slate-500">
-                Unlock deeper analytics and automation with the Pro plan.
-              </p>
-              <button
+Financial Freedom for Every Nigerian              </p>
+              {/* <button
                 type="button"
                 className="mt-3 inline-flex w-full items-center justify-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90"
               >
                 Explore Plans
-              </button>
+              </button> */}
             </div>
           </div>
         </div>

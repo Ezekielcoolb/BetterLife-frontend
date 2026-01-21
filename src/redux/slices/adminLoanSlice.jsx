@@ -140,25 +140,52 @@ export const fetchCustomerLoans = createAsyncThunk(
   }
 );
 
-export const fetchAdminDashboardAnalytics = createAsyncThunk(
-  "adminLoans/fetchAdminDashboardAnalytics",
-  async ({ year } = {}, { rejectWithValue }) => {
+export const fetchDashboardSummaryStats = createAsyncThunk(
+  "adminLoans/fetchDashboardSummaryStats",
+  async (_, { rejectWithValue }) => {
     try {
-      const params = {};
-
-      if (Number.isFinite(year)) {
-        params.year = year;
-      }
-
-      const response = await axios.get(`${API_BASE_URL}/api/admin/dashboard/analytics`, {
-        params,
-      });
-
+      const response = await axios.get(`${API_BASE_URL}/api/admin/dashboard/summary-stats`);
       return response.data;
     } catch (error) {
-      return rejectWithValue(
-        extractErrorMessage(error, "Unable to load admin dashboard analytics")
-      );
+      return rejectWithValue(extractErrorMessage(error, "Unable to load summary stats"));
+    }
+  }
+);
+
+export const fetchDashboardFinancialOverview = createAsyncThunk(
+  "adminLoans/fetchDashboardFinancialOverview",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/admin/dashboard/financial-overview`);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(extractErrorMessage(error, "Unable to load financial overview"));
+    }
+  }
+);
+
+export const fetchDashboardTargetProgress = createAsyncThunk(
+  "adminLoans/fetchDashboardTargetProgress",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/admin/dashboard/target-progress`);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(extractErrorMessage(error, "Unable to load target progress"));
+    }
+  }
+);
+
+export const fetchDashboardDisbursementTrends = createAsyncThunk(
+  "adminLoans/fetchDashboardDisbursementTrends",
+  async ({ year } = {}, { rejectWithValue }) => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/admin/dashboard/disbursement-trends`, {
+        params: { year },
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(extractErrorMessage(error, "Unable to load disbursement trends"));
     }
   }
 );
@@ -316,6 +343,18 @@ const initialState = {
   dashboardAnalyticsLoading: false,
   dashboardAnalyticsError: null,
   dashboardAnalyticsYear: new Date().getFullYear(),
+  dashboardSummary: null,
+  dashboardSummaryLoading: false,
+  dashboardSummaryError: null,
+  dashboardFinancials: null,
+  dashboardFinancialsLoading: false,
+  dashboardFinancialsError: null,
+  dashboardTarget: null,
+  dashboardTargetLoading: false,
+  dashboardTargetError: null,
+  dashboardTrends: [],
+  dashboardTrendsLoading: false,
+  dashboardTrendsError: null,
 };
 
 export const fetchLoansByCsoId = createAsyncThunk(
@@ -609,6 +648,10 @@ const adminLoanSlice = createSlice({
       state.customerDetailsError = null;
       state.businessReportError = null;
       state.businessLiquidityError = null;
+      state.dashboardSummaryError = null;
+      state.dashboardFinancialsError = null;
+      state.dashboardTargetError = null;
+      state.dashboardTrendsError = null;
     },
     resetLoanDetail(state) {
       state.detail = null;
@@ -991,20 +1034,56 @@ const adminLoanSlice = createSlice({
         state.monthlySummaryLoading = false;
         state.monthlySummaryError = action.payload || "Unable to load monthly summary";
       })
-      .addCase(fetchAdminDashboardAnalytics.pending, (state, action) => {
-        state.dashboardAnalyticsLoading = true;
-        state.dashboardAnalyticsError = null;
-        if (Number.isFinite(action.meta?.arg?.year)) {
+      .addCase(fetchDashboardSummaryStats.pending, (state) => {
+        state.dashboardSummaryLoading = true;
+        state.dashboardSummaryError = null;
+      })
+      .addCase(fetchDashboardSummaryStats.fulfilled, (state, action) => {
+        state.dashboardSummaryLoading = false;
+        state.dashboardSummary = action.payload;
+      })
+      .addCase(fetchDashboardSummaryStats.rejected, (state, action) => {
+        state.dashboardSummaryLoading = false;
+        state.dashboardSummaryError = action.payload;
+      })
+      .addCase(fetchDashboardFinancialOverview.pending, (state) => {
+        state.dashboardFinancialsLoading = true;
+        state.dashboardFinancialsError = null;
+      })
+      .addCase(fetchDashboardFinancialOverview.fulfilled, (state, action) => {
+        state.dashboardFinancialsLoading = false;
+        state.dashboardFinancials = action.payload;
+      })
+      .addCase(fetchDashboardFinancialOverview.rejected, (state, action) => {
+        state.dashboardFinancialsLoading = false;
+        state.dashboardFinancialsError = action.payload;
+      })
+      .addCase(fetchDashboardTargetProgress.pending, (state) => {
+        state.dashboardTargetLoading = true;
+        state.dashboardTargetError = null;
+      })
+      .addCase(fetchDashboardTargetProgress.fulfilled, (state, action) => {
+        state.dashboardTargetLoading = false;
+        state.dashboardTarget = action.payload;
+      })
+      .addCase(fetchDashboardTargetProgress.rejected, (state, action) => {
+        state.dashboardTargetLoading = false;
+        state.dashboardTargetError = action.payload;
+      })
+      .addCase(fetchDashboardDisbursementTrends.pending, (state, action) => {
+        state.dashboardTrendsLoading = true;
+        state.dashboardTrendsError = null;
+        if (action.meta?.arg?.year) {
           state.dashboardAnalyticsYear = action.meta.arg.year;
         }
       })
-      .addCase(fetchAdminDashboardAnalytics.fulfilled, (state, action) => {
-        state.dashboardAnalyticsLoading = false;
-        state.dashboardAnalytics = action.payload;
+      .addCase(fetchDashboardDisbursementTrends.fulfilled, (state, action) => {
+        state.dashboardTrendsLoading = false;
+        state.dashboardTrends = action.payload;
       })
-      .addCase(fetchAdminDashboardAnalytics.rejected, (state, action) => {
-        state.dashboardAnalyticsLoading = false;
-        state.dashboardAnalyticsError = action.payload || "Unable to load admin dashboard analytics";
+      .addCase(fetchDashboardDisbursementTrends.rejected, (state, action) => {
+        state.dashboardTrendsLoading = false;
+        state.dashboardTrendsError = action.payload;
       });
   },
 });

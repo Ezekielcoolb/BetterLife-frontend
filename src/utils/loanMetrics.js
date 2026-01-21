@@ -193,3 +193,76 @@ export const computeLoanMetrics = (loan, holidays = []) => {
     balanceRemaining: Number(balanceRemaining.toFixed(2)),
   };
 };
+
+export const generateRepaymentSchedule = (loan, holidays = []) => {
+  if (!loan || !loan.loanDetails) return [];
+
+  const dailyAmount = Number(loan.loanDetails.dailyAmount || 0);
+  const amountToBePaid = Number(loan.loanDetails.amountToBePaid || 0);
+  const disbursedAt = toDateOrNull(
+    loan.disbursedAt || loan.loanDetails.disbursedAt
+  );
+
+  const payments = Array.isArray(loan.dailyPayment) ? loan.dailyPayment : [];
+  let remainingTotalPaid = payments.reduce(
+    (sum, p) => sum + Number(p.amount || 0),
+    0
+  );
+
+  if (!disbursedAt || dailyAmount <= 0) return [];
+
+  const schedule = [];
+  let currentDate = new Date(disbursedAt);
+  currentDate.setDate(currentDate.getDate() + 1);
+
+  let scheduledAmount = 0;
+
+  let safetyCounter = 0;
+  const MAX_ITERATIONS = 365;
+
+  while (
+    scheduledAmount < amountToBePaid - 0.01 &&
+    safetyCounter < MAX_ITERATIONS
+  ) {
+    if (isWeekend(currentDate)) {
+      currentDate.setDate(currentDate.getDate() + 1);
+      continue;
+    }
+
+    if (isHoliday(currentDate, holidays)) {
+      schedule.push({
+        date: new Date(currentDate).toISOString(),
+        status: "holiday",
+        amountPaid: 0,
+        holidayReason: "Public Holiday",
+      });
+      currentDate.setDate(currentDate.getDate() + 1);
+      safetyCounter++;
+      continue;
+    }
+
+    const amountDue = Math.min(dailyAmount, amountToBePaid - scheduledAmount);
+    const amountPaidForDay = Math.min(remainingTotalPaid, amountDue);
+
+    remainingTotalPaid = Math.max(0, remainingTotalPaid - amountPaidForDay);
+    scheduledAmount += amountDue;
+
+    let status = "pending";
+    if (amountPaidForDay >= amountDue - 0.01) {
+      status = "paid";
+    } else if (amountPaidForDay > 0) {
+      status = "partial";
+    }
+
+    schedule.push({
+      date: new Date(currentDate).toISOString(),
+      status,
+      amountPaid: amountPaidForDay,
+    });
+
+    currentDate.setDate(currentDate.getDate() + 1);
+    safetyCounter++;
+  }
+
+  return schedule;
+};

@@ -1,6 +1,8 @@
-import { Menu, Bell, Search, UserCircle } from "lucide-react";
+import { Menu, Bell, Search, UserCircle, LogOut } from "lucide-react";
 
-export default function AdminNav({ onToggleSidebar }) {
+export default function AdminNav({ admin, onToggleSidebar, onLogout }) {
+  const adminLabel = admin?.email || "Admin";
+
   return (
     <header className="sticky top-0 z-30 w-full border-b border-slate-200 bg-white/80 backdrop-blur">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3">
@@ -44,17 +46,19 @@ export default function AdminNav({ onToggleSidebar }) {
 
           <button
             type="button"
-            className="hidden h-10 items-center rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-100 md:inline-flex"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
           >
-            Invite
+            <UserCircle className="h-6 w-6 text-slate-400" />
+            <span className="hidden md:inline">{adminLabel}</span>
           </button>
 
           <button
             type="button"
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            onClick={onLogout}
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700"
           >
-            <UserCircle className="h-6 w-6 text-slate-400" />
-            <span className="hidden md:inline">Ada Lovelace</span>
+            <LogOut className="h-4 w-4" />
+            <span className="hidden sm:inline">Sign out</span>
           </button>
         </div>
       </div>

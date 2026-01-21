@@ -95,16 +95,24 @@ const MEDIA_UPLOAD_CONFIG = {
     label: "Customer photo",
     description: "Upload a clear photo of the borrower.",
     folder: "customer",
+    accept: "image/*",
+    capture: "environment",
+    helperText: "Tap to snap a photo",
   },
   business: {
     label: "Business photo",
     description: "Show the business location or assets.",
     folder: "business",
+    accept: "image/*",
+    capture: "environment",
+    helperText: "Tap to capture business photo",
   },
   disclosure: {
     label: "Disclosure document",
     description: "Upload the signed disclosure form.",
     folder: "disclosure",
+    accept: "image/*,application/pdf",
+    helperText: "Upload photo or PDF document",
   },
 };
 
@@ -1538,7 +1546,7 @@ export default function CsoHome() {
                   <div>
                     <h2 className="text-lg font-semibold text-slate-900">Submit a new loan</h2>
                     <p className="text-sm text-slate-500">
-                      Capture borrower, business, and guarantor details. Form amount is fixed at ₦2,000.
+                      Capture borrower, business, and guarantor details. Form amount is fixed at ₦2,000 and insurance fee of ₦2,000.
                     </p>
                   </div>
                   <button
@@ -1826,10 +1834,11 @@ export default function CsoHome() {
                                 ) : (
                                   <label className="flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center transition hover:border-indigo-400 hover:bg-indigo-50">
                                     <span className="text-xs font-semibold text-indigo-600">Click to upload</span>
-                                    <span className="text-[11px] text-slate-500">JPG, PNG, or PDF files allowed</span>
+                                    <span className="text-[11px] text-slate-500">{config.helperText || "Upload supported file"}</span>
                                     <input
                                       type="file"
-                                      accept="image/*,application/pdf"
+                                      accept={config.accept || "image/*,application/pdf"}
+                                      capture={config.capture}
                                       className="hidden"
                                       onChange={(event) => handleUpload(event, key, config.folder)}
                                       disabled={isUploading}
@@ -2146,7 +2155,7 @@ export default function CsoHome() {
       )}
 
       {/* Floating Action Button */}
-      <div className="fixed bottom-6 right-6 z-50">
+      <div className="fixed bottom-16 right-6 z-50">
         {showFabMenu && (
           <div className="absolute bottom-16 right-0 space-y-3">
             <button

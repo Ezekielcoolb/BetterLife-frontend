@@ -273,6 +273,14 @@ export default function CsoCollection() {
      }
   }, [todayStatus.status]);
 
+  // Auto-fill remaining amount for partial payments
+  useEffect(() => {
+    if (todayStatus.status === 'partial') {
+        const remaining = totalCollectionValue - todayStatus.paid;
+        setRemittanceData(prev => ({ ...prev, amountPaid: remaining }));
+    }
+  }, [todayStatus.status, todayStatus.paid, totalCollectionValue]);
+
   useEffect(() => {
     if (csoProfile) {
       checkOutstandingRemittance(csoProfile);
@@ -588,18 +596,29 @@ export default function CsoCollection() {
             </div>
             
             <form onSubmit={handleRemittanceSubmit} className="space-y-4">
-                <div className="rounded-xl bg-indigo-50 p-4">
-                    <p className="text-sm text-indigo-600">Total Collection Today</p>
-                    <p className="text-2xl font-bold text-indigo-900">{totalCollectionForDay}</p>
+                <div className="rounded-xl bg-indigo-50 p-4 space-y-2">
+                    <div className="flex justify-between items-center border-b border-indigo-100 pb-2">
+                        <span className="text-sm text-indigo-700">Total Collection</span>
+                        <span className="text-lg font-bold text-indigo-900">{totalCollectionForDay}</span>
+                    </div>
                     {todayStatus.status === 'partial' && (
-                        <p className="mt-1 text-xs text-amber-600">
-                            Already paid: {formatCurrency(todayStatus.paid)}
-                        </p>
+                        <>
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm text-amber-600">Already Paid</span>
+                                <span className="font-semibold text-amber-700">{formatCurrency(todayStatus.paid)}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm font-medium pt-1">
+                                <span className="text-indigo-600"> Remaining Collection</span>
+                                <span className="text-rose-600 font-bold">{formatCurrency(totalCollectionValue - todayStatus.paid)}</span>
+                            </div>
+                        </>
                     )}
                 </div>
 
                 <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">Amount to Remit</label>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                        {todayStatus.status === 'partial' ? "Additional Amount to Remit" : "Amount to Remit"}
+                    </label>
                     <input 
                         type="number" 
                         required
@@ -607,8 +626,9 @@ export default function CsoCollection() {
                         max={totalCollectionValue - todayStatus.paid}
                         value={remittanceData.amountPaid}
                         onChange={(e) => setRemittanceData({...remittanceData, amountPaid: e.target.value})}
-                        className="w-full rounded-xl border border-slate-300 px-4 py-2 focus:border-indigo-500 focus:outline-none"
-                        placeholder="Enter amount"
+                        className={`w-full rounded-xl border border-slate-300 px-4 py-2 focus:border-indigo-500 focus:outline-none ${todayStatus.status === 'partial' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
+                        placeholder="Enter amount to pay now"
+                        disabled={todayStatus.status === 'partial'}
                     />
                 </div>
 
@@ -681,25 +701,27 @@ export default function CsoCollection() {
                 </div>
             )}
 
-          <label className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-2 text-sm">
-            <CalendarIcon className="h-4 w-4 text-slate-500" />
-            <input
-              type="date"
-              value={selectedDate}
-              max={new Date().toISOString().slice(0, 10)}
-              onChange={handleDateChange}
-              className="w-full border-none bg-transparent text-sm font-semibold text-slate-700 focus:outline-none"
-            />
-          </label>
+          <div className="flex items-center gap-3">
+            <label className="flex flex-1 items-center gap-3 rounded-2xl border border-slate-200 px-4 py-2 text-sm">
+              <CalendarIcon className="h-4 w-4 text-slate-500" />
+              <input
+                type="date"
+                value={selectedDate}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={handleDateChange}
+                className="w-full border-none bg-transparent text-sm font-semibold text-slate-700 focus:outline-none"
+              />
+            </label>
 
-          <button
-            type="button"
-            onClick={handleRefresh}
-            className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={collectionLoading}
-          >
-            {collectionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Refresh
-          </button>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={collectionLoading}
+            >
+              {collectionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Refresh
+            </button>
+          </div>
         </div>
       </header>
 
@@ -710,7 +732,7 @@ export default function CsoCollection() {
             <p className="text-lg font-semibold text-slate-900">{displayDate}</p>
           </div>
 
-          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <dl className="grid gap-3 grid-cols-2 lg:grid-cols-4">
             <div className="rounded-2xl bg-slate-50 px-4 py-3">
               <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">Customers</dt>
               <dd className="text-lg font-semibold text-slate-900">{collectionSummary.totalCustomers || 0}</dd>
@@ -839,7 +861,7 @@ export default function CsoCollection() {
                               className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-slate-600 hover:bg-slate-50"
                             >
                               <Wallet className="h-4 w-4 text-indigo-600" />
-                              Record payment
+                              Make payment
                             </button>
                             <button
                               type="button"

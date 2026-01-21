@@ -9,6 +9,7 @@ import adminRemittanceReducer from "./slices/adminRemittanceSlice";
 import adminDailyTransactionReducer from "./slices/adminDailyTransactionSlice";
 import holidayReducer from "./slices/holidaySlice";
 import adminPanelReducer from "./slices/adminPanelSlice";
+import adminAuthReducer from "./slices/adminAuthSlice";
 import expenseReducer from "./slices/expenseSlice";
 import cashAtHandReducer from "./slices/cashAtHandSlice";
 import groupLeaderReducer from "./slices/groupLeaderSlice";
@@ -26,6 +27,7 @@ const store = configureStore({
     adminDailyTransactions: adminDailyTransactionReducer,
     holiday: holidayReducer,
     adminPanel: adminPanelReducer,
+    adminAuth: adminAuthReducer,
     expenses: expenseReducer,
     cashAtHand: cashAtHandReducer,
     groupLeader: groupLeaderReducer,
