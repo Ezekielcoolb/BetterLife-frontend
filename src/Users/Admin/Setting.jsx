@@ -1,7 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
+import { useDispatch, useSelector } from "react-redux";
+import toast from "react-hot-toast";
 import BranchTarget from "./Branch/BranchTarget";
 import CsoDefaultingTarget from "./csoSettings/CsoDefaultingTarget";
 import InterestManager from "./interestSettings/InterestManager";
+import { updateAdminPassword, clearAdminAuthError } from "../../redux/slices/adminAuthSlice";
 
 const tabs = [
   { id: "security", label: "Security" },
@@ -17,9 +21,16 @@ const initialSecurityForm = {
 };
 
 const Setting = () => {
+  const dispatch = useDispatch();
+  const { updatingPassword, error: adminError } = useSelector((state) => state.adminAuth);
   const [activeTab, setActiveTab] = useState("security");
   const [securityForm, setSecurityForm] = useState(initialSecurityForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [passwordVisibility, setPasswordVisibility] = useState({
+    current: false,
+    new: false,
+    confirm: false,
+  });
 
   const isSecurityFormValid = useMemo(
     () =>
@@ -35,18 +46,47 @@ const Setting = () => {
     setSecurityForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSecuritySubmit = (event) => {
+  const togglePasswordVisibility = (field) => {
+    setPasswordVisibility((prev) => ({
+      ...prev,
+      [field]: !prev[field],
+    }));
+  };
+
+  const handleSecuritySubmit = async (event) => {
     event.preventDefault();
     if (!isSecurityFormValid) {
       return;
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      await dispatch(
+        updateAdminPassword({
+          currentPassword: securityForm.currentPassword,
+          newPassword: securityForm.newPassword,
+          confirmPassword: securityForm.confirmPassword,
+        })
+      ).unwrap();
+
       setSecurityForm(initialSecurityForm);
-    }, 1000);
+      toast.success("Password updated successfully");
+    } catch (err) {
+      const message = typeof err === "string" ? err : "Unable to update password";
+      toast.error(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  useEffect(() => {
+    if (!adminError) {
+      return;
+    }
+
+    toast.error(adminError);
+    dispatch(clearAdminAuthError());
+  }, [adminError, dispatch]);
 
   const renderSecurityTab = () => (
     <form className="space-y-6" onSubmit={handleSecuritySubmit}>
@@ -55,48 +95,78 @@ const Setting = () => {
           <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="currentPassword">
             Current Password
           </label>
-          <input
-            id="currentPassword"
-            name="currentPassword"
-            type="password"
-            value={securityForm.currentPassword}
-            onChange={handleSecurityChange}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-            placeholder="Enter current password"
-            required
-          />
+          <div className="relative">
+            <input
+              id="currentPassword"
+              name="currentPassword"
+              type={passwordVisibility.current ? "text" : "password"}
+              value={securityForm.currentPassword}
+              onChange={handleSecurityChange}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 pr-12 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              placeholder="Enter current password"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => togglePasswordVisibility("current")}
+              className="absolute inset-y-0 right-0 flex items-center justify-center px-3 text-slate-500 transition hover:text-slate-700"
+              aria-label={passwordVisibility.current ? "Hide current password" : "Show current password"}
+            >
+              {passwordVisibility.current ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
 
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="newPassword">
             New Password
           </label>
-          <input
-            id="newPassword"
-            name="newPassword"
-            type="password"
-            value={securityForm.newPassword}
-            onChange={handleSecurityChange}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-            placeholder="Enter new password"
-            required
-          />
+          <div className="relative">
+            <input
+              id="newPassword"
+              name="newPassword"
+              type={passwordVisibility.new ? "text" : "password"}
+              value={securityForm.newPassword}
+              onChange={handleSecurityChange}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 pr-12 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              placeholder="Enter new password"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => togglePasswordVisibility("new")}
+              className="absolute inset-y-0 right-0 flex items-center justify-center px-3 text-slate-500 transition hover:text-slate-700"
+              aria-label={passwordVisibility.new ? "Hide new password" : "Show new password"}
+            >
+              {passwordVisibility.new ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
 
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="confirmPassword">
             Confirm Password
           </label>
-          <input
-            id="confirmPassword"
-            name="confirmPassword"
-            type="password"
-            value={securityForm.confirmPassword}
-            onChange={handleSecurityChange}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-            placeholder="Confirm new password"
-            required
-          />
+          <div className="relative">
+            <input
+              id="confirmPassword"
+              name="confirmPassword"
+              type={passwordVisibility.confirm ? "text" : "password"}
+              value={securityForm.confirmPassword}
+              onChange={handleSecurityChange}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 pr-12 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              placeholder="Confirm new password"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => togglePasswordVisibility("confirm")}
+              className="absolute inset-y-0 right-0 flex items-center justify-center px-3 text-slate-500 transition hover:text-slate-700"
+              aria-label={passwordVisibility.confirm ? "Hide confirmation password" : "Show confirmation password"}
+            >
+              {passwordVisibility.confirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -105,16 +175,16 @@ const Setting = () => {
           type="button"
           className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
           onClick={() => setSecurityForm(initialSecurityForm)}
-          disabled={isSubmitting}
+          disabled={isSubmitting || updatingPassword}
         >
           Reset
         </button>
         <button
           type="submit"
           className="inline-flex items-center rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={!isSecurityFormValid || isSubmitting}
+          disabled={!isSecurityFormValid || isSubmitting || updatingPassword}
         >
-          {isSubmitting ? "Updating..." : "Update Password"}
+          {isSubmitting || updatingPassword ? "Updating..." : "Update Password"}
         </button>
       </div>
     </form>

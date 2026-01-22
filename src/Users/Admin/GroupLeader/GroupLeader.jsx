@@ -5,7 +5,8 @@ import { MoreVertical, CheckCircle, Edit, Trash2, Users, User, Phone, Calendar, 
 import { fetchGroupLeaders, approveGroupLeader, updateGroupLeader, deleteGroupLeader, clearGroupLeaderError, transferGroupToCso } from "../../../redux/slices/groupLeaderSlice";
 import { fetchCsos } from "../../../redux/slices/csoSlice";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+// const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+const API_BASE_URL = "https://api.betterlifeloan.com"
 
 const STATUS_BADGE_STYLES = {
   "waiting for approval": "bg-amber-100 text-amber-700 border-amber-200",

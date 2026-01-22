@@ -772,7 +772,7 @@ export default function Expenses() {
                     {form.receiptImg ? (
                       <div className="space-y-3">
                         <img
-                          src={`http://localhost:5000${form.receiptImg}`}
+                          src={`https://api.betterlifeloan.com${form.receiptImg}`}
                           alt="Receipt preview"
                           className="mx-auto h-40 w-full rounded-lg object-cover"
                         />

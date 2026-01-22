@@ -296,7 +296,7 @@ export default function CsoDetails() {
       {/* Image Preview Modal */}
       {imageModal && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4" onClick={() => setImageModal(null)}>
-              <img src={`http://localhost:5000${imageModal}`} alt="Proof" className="max-h-[90vh] max-w-full rounded-lg" />
+              <img src={`${API_BASE_URL}${imageModal}`} alt="Proof" className="max-h-[90vh] max-w-full rounded-lg" />
               <button className="absolute top-4 right-4 text-white" onClick={() => setImageModal(null)}>
                   <X className="h-8 w-8" />
               </button>

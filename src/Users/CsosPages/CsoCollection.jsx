@@ -7,8 +7,10 @@ import { clearLoanError, fetchCsoCollection, fetchCsoFormCollection } from "../.
 import { fetchCsoProfile, postCsoRemittance, clearCsoError, resetRemittanceSuccess } from "../../redux/slices/csoSlice";
 import { fetchMyApprovedGroupLeaders } from "../../redux/slices/groupLeaderSlice";
 import { uploadImages, resetUpload } from "../../redux/slices/uploadSlice";
+import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+// const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+const API_BASE_URL = "https://api.betterlifeloan.com"
 
 function getRemittanceReferenceDate(baseDate = new Date()) {
   const reference = new Date(baseDate);
@@ -58,6 +60,11 @@ const formatCurrency = (value) => {
     currency: "NGN",
     maximumFractionDigits: 2,
   }).format(value);
+};
+
+const toNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 };
 
 const STATUS_BADGES = {
@@ -283,7 +290,9 @@ export default function CsoCollection() {
 
   useEffect(() => {
     if (csoProfile) {
-      checkOutstandingRemittance(csoProfile);
+      (async () => {
+        await checkOutstandingRemittance(csoProfile);
+      })();
     }
   }, [csoProfile]);
 
@@ -299,7 +308,7 @@ export default function CsoCollection() {
     }
   }, [uploadedUrls, uploadTarget, dispatch]);
 
-  const checkOutstandingRemittance = (profile) => {
+  const checkOutstandingRemittance = async (profile) => {
     if (!profile || !profile.remittance) {
       setShowYesterdayModal(false);
       setPendingRemittanceDate(null);
@@ -322,22 +331,62 @@ export default function CsoCollection() {
       return;
     }
 
-    // Check if resolved
-    const isResolved = targetRemittances.some((record) => record.resolvedIssue);
-    if (isResolved) {
-      setShowYesterdayModal(false);
-      setPendingRemittanceDate(null);
-      return;
+    // Calculate totals
+    let amountCollected = Math.max(
+      ...targetRemittances.map((record) => toNumber(record.amountCollected))
+    );
+
+    if (!Number.isFinite(amountCollected) || amountCollected === 0) {
+      try {
+        const [collectionResponse, formCollectionResponse] = await Promise.all([
+          axios.get(`${API_BASE_URL}/api/csos/collection`, {
+            params: { date: referenceDateStr },
+          }),
+          axios.get(`${API_BASE_URL}/api/csos/form-collection`, {
+            params: { date: referenceDateStr },
+          }),
+        ]);
+
+        const collectionSummary = collectionResponse.data?.summary || {};
+        const formSummary = formCollectionResponse.data?.summary || {};
+
+        const derivedAmountCollected =
+          Number(collectionSummary.totalPaidToday || 0) +
+          Number(formSummary.totalLoanAppForm || 0);
+
+        if (derivedAmountCollected > amountCollected) {
+          amountCollected = derivedAmountCollected;
+        }
+      } catch (error) {
+        // Swallow errors silently; modal logic will rely on available data
+        // eslint-disable-next-line no-console
+        console.warn("Unable to fetch previous collection summary", error);
+      }
     }
 
-    // Calculate totals
-    const amountCollected = Math.max(
-      ...targetRemittances.map((record) => Number(record.amountCollected) || 0)
-    );
-    const totalPaid = targetRemittances.reduce(
-      (sum, record) => sum + (Number(record.amountPaid) || 0),
-      0
-    );
+    const totalPaid = targetRemittances.reduce((sum, record) => {
+      const directPaid = Math.max(
+        toNumber(record.amountPaid),
+        toNumber(record.amountRemitted),
+        toNumber(record.amountOnTeller)
+      );
+
+      const partialPaid = Array.isArray(record.partialSubmissions)
+        ? record.partialSubmissions.reduce(
+            (partialSum, submission) =>
+              partialSum +
+              toNumber(
+                submission.amountPaid ??
+                  submission.amount ??
+                  submission.amountRemitted ??
+                  submission.value
+              ),
+            0
+          )
+        : 0;
+
+      return sum + directPaid + partialPaid;
+    }, 0);
 
     if (totalPaid < amountCollected) {
       setYesterdayModalType("partial");
@@ -471,15 +520,15 @@ export default function CsoCollection() {
            return;
       }
       
-      const today = new Date();
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
+      const referenceFallback = getRemittanceReferenceDate(new Date());
 
       const payload = {
         amountCollected: yesterdayRemittanceData.amountCollected,
         amountPaid: amountToPay, // Send only the incremental amount
         image: yesterdayRemittanceData.image, 
-        date: pendingRemittanceDate ? pendingRemittanceDate.toISOString() : yesterday.toISOString(),
+        date: pendingRemittanceDate
+          ? pendingRemittanceDate.toISOString()
+          : referenceFallback.toISOString(),
         remark: yesterdayRemittanceData.remark
       };
 

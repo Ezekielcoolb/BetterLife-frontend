@@ -7,7 +7,8 @@ import { fetchCsoLoanById, resetLoanDetail, clearLoanError, syncLoanRepaymentSch
 import { computeLoanMetrics } from "../../utils/loanMetrics";
 import LoanCard from "./LoanCard";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+// const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+const API_BASE_URL = "https://api.betterlifeloan.com"
 
 const formatCurrency = (value) => {
   if (typeof value !== "number" || Number.isNaN(value)) {
@@ -361,7 +362,7 @@ export default function LoanActiveDetails() {
 
             <div className="max-h-[70vh] overflow-auto rounded-lg border border-slate-200">
               <img
-                src={`http://localhost:5000/${disbursementPictureRaw}`}
+                src={`https://api.betterlifeloan.com${disbursementPictureRaw}`}
                 alt="Preview"
                 className="h-full w-full object-contain"
               />

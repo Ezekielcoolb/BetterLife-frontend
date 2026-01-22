@@ -42,7 +42,8 @@ export default function CustomerFormPreview() {
     }
   }, [customerDetailsError, dispatch]);
 
-  const URL = "http://localhost:5000";
+  // const URL = "http://localhost:5000";
+  const URL = "https://api.betterlifeloan.com"
 
   const formatDateTime = (value) => {
     if (!value) return "—";

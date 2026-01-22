@@ -29,8 +29,10 @@ import {
   ArrowRight,
   Search,
 } from "lucide-react";
+import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+// const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+const API_BASE_URL = "https://api.betterlifeloan.com"
 
 function getRemittanceReferenceDate(baseDate = new Date()) {
   const reference = new Date(baseDate);
@@ -356,6 +358,24 @@ function displayText(value) {
   return String(value);
 }
 
+const remittanceNumber = (value) => {
+  if (value === null || value === undefined) {
+    return 0;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (typeof value === "string") {
+    const sanitized = value.replace(/[^0-9.-]+/g, "");
+    const parsed = Number(sanitized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+};
+
 function ReviewSection({ title, description, onEdit, children }) {
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -430,6 +450,10 @@ export default function CsoHome() {
   const [showBlockingModal, setShowBlockingModal] = useState(false);
   const [blockingModalType, setBlockingModalType] = useState(null); // 'missing' | 'partial'
   const [pendingRemittanceDate, setPendingRemittanceDate] = useState(null);
+  const [pendingRemittanceSummary, setPendingRemittanceSummary] = useState({
+    collected: 0,
+    paid: 0,
+  });
 
   const navigate = useNavigate();
 
@@ -550,11 +574,13 @@ export default function CsoHome() {
 
   useEffect(() => {
     if (csoProfile) {
-      checkOutstandingRemittance(csoProfile);
+      (async () => {
+        await checkOutstandingRemittance(csoProfile);
+      })();
     }
   }, [csoProfile]);
 
-  const checkOutstandingRemittance = (profile) => {
+  const checkOutstandingRemittance = async (profile) => {
     if (!profile || !profile.remittance) {
       setShowBlockingModal(false);
       setPendingRemittanceDate(null);
@@ -573,34 +599,76 @@ export default function CsoHome() {
     if (targetRemittances.length === 0) {
       setBlockingModalType("missing");
       setPendingRemittanceDate(referenceDate);
+      setPendingRemittanceSummary({ collected: 0, paid: 0 });
       setShowBlockingModal(true);
       return;
     }
 
-    // Case 2: Remittance exists, check if resolved
-    const isResolved = targetRemittances.some((record) => record.resolvedIssue);
-    if (isResolved) {
-      setShowBlockingModal(false);
-      setPendingRemittanceDate(null);
-      return;
+    // Case 2: Check for partial payment or underpayment
+    let amountCollected = Math.max(
+      ...targetRemittances.map((record) => remittanceNumber(record.amountCollected))
+    );
+
+    if (!Number.isFinite(amountCollected) || amountCollected === 0) {
+      try {
+        const [collectionResponse, formCollectionResponse] = await Promise.all([
+          axios.get(`${API_BASE_URL}/api/csos/collection`, {
+            params: { date: referenceDateStr },
+          }),
+          axios.get(`${API_BASE_URL}/api/csos/form-collection`, {
+            params: { date: referenceDateStr },
+          }),
+        ]);
+
+        const collectionSummary = collectionResponse.data?.summary || {};
+        const formSummary = formCollectionResponse.data?.summary || {};
+
+        const derivedAmountCollected =
+          remittanceNumber(collectionSummary.totalPaidToday) +
+          remittanceNumber(formSummary.totalLoanAppForm);
+
+        if (derivedAmountCollected > amountCollected) {
+          amountCollected = derivedAmountCollected;
+        }
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.warn("Unable to fetch previous collection summary", error);
+      }
     }
 
-    // Case 3: Check for partial payment
-    const amountCollected = Math.max(
-      ...targetRemittances.map((record) => Number(record.amountCollected) || 0)
-    );
-    const totalPaid = targetRemittances.reduce(
-      (sum, record) => sum + (Number(record.amountPaid) || 0),
-      0
-    );
+    const totalPaid = targetRemittances.reduce((sum, record) => {
+      const directPaid = Math.max(
+        remittanceNumber(record.amountPaid),
+        remittanceNumber(record.amountRemitted),
+        remittanceNumber(record.amountOnTeller)
+      );
+
+      const partialPaid = Array.isArray(record.partialSubmissions)
+        ? record.partialSubmissions.reduce(
+            (partialSum, submission) =>
+              partialSum +
+              remittanceNumber(
+                submission.amountPaid ??
+                  submission.amount ??
+                  submission.amountRemitted ??
+                  submission.value
+              ),
+            0
+          )
+        : 0;
+
+      return sum + directPaid + partialPaid;
+    }, 0);
 
     if (totalPaid < amountCollected) {
       setBlockingModalType("partial");
       setPendingRemittanceDate(referenceDate);
+      setPendingRemittanceSummary({ collected: amountCollected, paid: totalPaid });
       setShowBlockingModal(true);
     } else {
       setShowBlockingModal(false);
       setPendingRemittanceDate(null);
+      setPendingRemittanceSummary({ collected: 0, paid: 0 });
     }
   };
 
@@ -1339,6 +1407,31 @@ export default function CsoHome() {
                   Your remittance for {formatRemittanceDateLabel(pendingRemittanceDate)} is incomplete. Please
                   complete the payment to continue.
                 </p>
+                <div className="rounded-xl bg-slate-50 p-4 text-left text-sm text-slate-600">
+                  <div className="flex items-center justify-between">
+                    <span>Total collected</span>
+                    <span className="font-semibold text-slate-900">
+                      {formatCurrencyValue(pendingRemittanceSummary?.collected ?? 0)}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span>Amount remitted</span>
+                    <span className="font-semibold text-emerald-600">
+                      {formatCurrencyValue(pendingRemittanceSummary?.paid ?? 0)}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span>Outstanding balance</span>
+                    <span className="font-semibold text-rose-600">
+                      {formatCurrencyValue(
+                        Math.max(
+                          (pendingRemittanceSummary?.collected ?? 0) - (pendingRemittanceSummary?.paid ?? 0),
+                          0
+                        )
+                      )}
+                    </span>
+                  </div>
+                </div>
                 <button
                   onClick={() => navigate("/cso/collections")}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-indigo-700"

@@ -14,7 +14,8 @@ import {
 import { uploadImages } from "../../redux/slices/uploadSlice";
 import { updateCsoProfile, updateCsoSignature } from "../../redux/slices/csoAuthSlice";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+// const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+const API_BASE_URL = "https://api.betterlifeloan.com"
 
 const PROFILE_UPLOAD_FOLDER = "cso-profile";
 const SIGNATURE_UPLOAD_FOLDER = "cso-signatures";

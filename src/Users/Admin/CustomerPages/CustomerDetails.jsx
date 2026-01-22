@@ -67,7 +67,8 @@ export default function CustomerDetails() {
     }
   }, [customerDetailsError, dispatch]);
 
-  const URL = "http://localhost:5000";
+  // const URL = "http://localhost:5000";
+  const URL = "https://api.betterlifeloan.com"
   const formatCurrency = (value) => {
     if (value === null || value === undefined || value === "") {
       return "—";

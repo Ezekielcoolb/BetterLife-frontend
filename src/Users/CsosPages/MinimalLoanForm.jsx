@@ -9,7 +9,8 @@ import { clearLoanError, submitLoan, fetchCsoOutstandingLoans } from "../../redu
 import { uploadImages } from "../../redux/slices/uploadSlice";
 import { fetchMyApprovedGroupLeaders } from "../../redux/slices/groupLeaderSlice";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+// const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+const API_BASE_URL = "https://api.betterlifeloan.com"
 
 const MEDIA_UPLOAD_CONFIG = {
   customer: {

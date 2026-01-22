@@ -221,7 +221,7 @@ export default function Disbursement() {
             </header>
 
             <div className="max-h-[70vh] overflow-auto rounded-lg border border-slate-200">
-              <img src={`http://localhost:5173/${previewModal.url}`} alt="Disbursement proof" className="h-full w-full object-contain" />
+              <img src={`https://api.betterlifeloan.com${previewModal.url}`} alt="Disbursement proof" className="h-full w-full object-contain" />
             </div>
           </div>
         </div>

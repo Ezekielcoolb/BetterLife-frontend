@@ -6,7 +6,8 @@ import {
   saveAdminAuth,
 } from "../../utils/adminAuth";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+// const API_BASE_URL =  "http://localhost:5000";
+const API_BASE_URL =  "https://api.betterlifeloan.com";
 
 const storedAuth = getStoredAdminAuth();
 
@@ -19,6 +20,7 @@ const initialState = {
   admin: storedAuth.admin,
   loading: false,
   fetchingProfile: false,
+  updatingPassword: false,
   error: null,
 };
 
@@ -41,6 +43,42 @@ export const loginAdmin = createAsyncThunk(
       return { token, admin };
     } catch (error) {
       return rejectWithValue(extractErrorMessage(error, "Unable to sign in"));
+    }
+  }
+);
+
+export const updateAdminPassword = createAsyncThunk(
+  "adminAuth/updatePassword",
+  async (
+    { currentPassword, newPassword, confirmPassword },
+    { getState, rejectWithValue }
+  ) => {
+    const state = getState();
+    const token = state.adminAuth?.token || getStoredAdminAuth().token;
+
+    if (!token) {
+      return rejectWithValue("Unauthorized");
+    }
+
+    try {
+      axios.defaults.headers.common.Authorization = `Bearer ${token}`;
+      const response = await axios.patch(`${API_BASE_URL}/api/admin/me/password`, {
+        currentPassword,
+        newPassword,
+        confirmPassword,
+      });
+
+      return response.data?.message || "Password updated successfully";
+    } catch (error) {
+      if (error.response?.status === 401) {
+        clearAdminAuth();
+        delete axios.defaults.headers.common.Authorization;
+        return rejectWithValue("Unauthorized");
+      }
+
+      return rejectWithValue(
+        extractErrorMessage(error, "Unable to update password")
+      );
     }
   }
 );
@@ -157,6 +195,17 @@ const adminAuthSlice = createSlice({
           action.payload && action.payload !== "Unauthorized"
             ? action.payload
             : state.error;
+      })
+      .addCase(updateAdminPassword.pending, (state) => {
+        state.updatingPassword = true;
+        state.error = null;
+      })
+      .addCase(updateAdminPassword.fulfilled, (state) => {
+        state.updatingPassword = false;
+      })
+      .addCase(updateAdminPassword.rejected, (state, action) => {
+        state.updatingPassword = false;
+        state.error = action.payload || "Unable to update password";
       });
   },
 });

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Mail, MapPin, Menu, Phone, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronDown, Mail, MapPin, Menu, Phone, X } from "lucide-react";
 
 const navItems = [
   { label: "About", id: "about" },
@@ -11,9 +11,15 @@ const navItems = [
 
 export default function Nav() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isLoginMenuOpen, setIsLoginMenuOpen] = useState(false);
+  const loginMenuRef = useRef(null);
 
   const handleToggleMenu = () => setIsMenuOpen((prev) => !prev);
-  const handleNavigate = () => setIsMenuOpen(false);
+  const handleNavigate = () => {
+    setIsMenuOpen(false);
+    setIsLoginMenuOpen(false);
+  };
+  const handleLoginToggle = () => setIsLoginMenuOpen((prev) => !prev);
 
   useEffect(() => {
     if (typeof document === "undefined") {
@@ -32,6 +38,24 @@ export default function Nav() {
       document.body.style.overflow = originalOverflow;
     };
   }, [isMenuOpen]);
+
+  useEffect(() => {
+    if (!isLoginMenuOpen) {
+      return () => {};
+    }
+
+    const handleClickOutside = (event) => {
+      if (loginMenuRef.current && !loginMenuRef.current.contains(event.target)) {
+        setIsLoginMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isLoginMenuOpen]);
 
   return (
     <header className="fixed inset-x-0 top-0 z-50">
@@ -88,13 +112,51 @@ export default function Nav() {
                 </span>
               </a>
             ))}
-            <a
-              href="#contact"
-              onClick={handleNavigate}
-              className="rounded-full bg-[#1a3a52] px-4 py-2 text-white shadow-sm transition hover:bg-[#174061]"
+            <div
+              ref={loginMenuRef}
+              className="relative"
+              onMouseEnter={() => setIsLoginMenuOpen(true)}
+              onMouseLeave={() => setIsLoginMenuOpen(false)}
+              onFocus={() => setIsLoginMenuOpen(true)}
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) {
+                  setIsLoginMenuOpen(false);
+                }
+              }}
             >
-             Login
-            </a>
+              <button
+                type="button"
+                onClick={handleLoginToggle}
+                className="inline-flex items-center gap-2 rounded-full bg-[#1a3a52] px-4 py-2 text-white shadow-sm transition hover:bg-[#174061]"
+                aria-haspopup="menu"
+                aria-expanded={isLoginMenuOpen}
+              >
+                Login
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${isLoginMenuOpen ? "rotate-180" : ""}`}
+                  aria-hidden
+                />
+              </button>
+
+              {isLoginMenuOpen ? (
+                <div className="absolute right-0 z-10 mt-2 w-48 rounded-2xl border border-slate-100 bg-white p-2 shadow-lg ring-1 ring-black/5">
+                  <a
+                    href="/cso/login"
+                    onClick={handleNavigate}
+                    className="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-[#1a3a52]"
+                  >
+                    CSO Login
+                  </a>
+                  <a
+                    href="/admin/signin"
+                    onClick={handleNavigate}
+                    className="mt-1 block rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-[#1a3a52]"
+                  >
+                    Admin Login
+                  </a>
+                </div>
+              ) : null}
+            </div>
           </nav>
 
           <button

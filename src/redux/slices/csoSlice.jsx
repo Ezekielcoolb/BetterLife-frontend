@@ -2,7 +2,8 @@ import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import axios from "axios";
 import { getStoredCsoAuth } from "../../utils/csoAuth";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+// const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+const API_BASE_URL =  "https://api.betterlifeloan.com";
 
 const extractErrorMessage = (error, fallback) => {
   return error.response?.data?.message || error.message || fallback;
