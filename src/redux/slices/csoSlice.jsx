@@ -50,6 +50,46 @@ export const updateCso = createAsyncThunk(
   }
 );
 
+export const fetchAdminCsoWallet = createAsyncThunk(
+  "cso/fetchAdminWallet",
+  async ({ csoId, asOf }, { getState, rejectWithValue }) => {
+    try {
+      const params = {};
+      if (asOf) {
+        params.asOf = asOf;
+      }
+
+      const response = await axios.get(
+        `${API_BASE_URL}/api/admin/csos/${csoId}/wallet`,
+        { params }
+      );
+
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(
+        extractErrorMessage(error, "Failed to load CSO wallet")
+      );
+    }
+  }
+);
+
+export const approveCsoWalletWithdrawal = createAsyncThunk(
+  "cso/approveWalletWithdrawal",
+  async ({ csoId }, { rejectWithValue }) => {
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/api/admin/csos/${csoId}/wallet/withdraw`
+      );
+
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(
+        extractErrorMessage(error, "Failed to approve withdrawal")
+      );
+    }
+  }
+);
+
 export const changeCsoStatus = createAsyncThunk(
   "cso/changeStatus",
   async ({ id, isActive }, { rejectWithValue }) => {
@@ -282,6 +322,22 @@ const csoSlice = createSlice({
       error: null,
       loans: [],
       totalOutstanding: 0,
+    },
+    adminWallet: {
+      loading: false,
+      submitting: false,
+      error: null,
+      summary: null,
+      cso: null,
+      lastWithdrawal: null,
+      bonusBreakdown: {
+        basePerformanceBonus: 0,
+        overshootBonus: 0,
+      },
+      lastWithdrawalBreakdown: {
+        performance: 0,
+        overshoot: 0,
+      },
     },
   },
   reducers: {
@@ -545,6 +601,53 @@ const csoSlice = createSlice({
         state.adminOutstanding.loading = false;
         state.adminOutstanding.error =
           action.payload || "Failed to load CSO outstanding loans";
+      })
+      .addCase(fetchAdminCsoWallet.pending, (state) => {
+        state.adminWallet.loading = true;
+        state.adminWallet.error = null;
+      })
+      .addCase(fetchAdminCsoWallet.fulfilled, (state, action) => {
+        state.adminWallet.loading = false;
+        state.adminWallet.summary = action.payload?.summary || null;
+        state.adminWallet.cso = action.payload?.cso || null;
+        state.adminWallet.bonusBreakdown = {
+          basePerformanceBonus:
+            action.payload?.summary?.performance?.basePerformanceBonus || 0,
+          overshootBonus:
+            action.payload?.summary?.performance?.overshootBonus || 0,
+        };
+        state.adminWallet.lastWithdrawal = null;
+        state.adminWallet.lastWithdrawalBreakdown = { performance: 0, overshoot: 0 };
+      })
+      .addCase(fetchAdminCsoWallet.rejected, (state, action) => {
+        state.adminWallet.loading = false;
+        state.adminWallet.error =
+          action.payload || "Failed to load CSO wallet";
+      })
+      .addCase(approveCsoWalletWithdrawal.pending, (state) => {
+        state.adminWallet.submitting = true;
+        state.adminWallet.error = null;
+      })
+      .addCase(approveCsoWalletWithdrawal.fulfilled, (state, action) => {
+        state.adminWallet.submitting = false;
+        state.adminWallet.summary = action.payload?.summary || null;
+        state.adminWallet.cso = action.payload?.cso || state.adminWallet.cso;
+        state.adminWallet.lastWithdrawal = action.payload?.amount || null;
+        state.adminWallet.bonusBreakdown = {
+          basePerformanceBonus:
+            action.payload?.summary?.performance?.basePerformanceBonus || 0,
+          overshootBonus:
+            action.payload?.summary?.performance?.overshootBonus || 0,
+        };
+        state.adminWallet.lastWithdrawalBreakdown = {
+          performance: action.payload?.breakdown?.performance || 0,
+          overshoot: action.payload?.breakdown?.overshoot || 0,
+        };
+      })
+      .addCase(approveCsoWalletWithdrawal.rejected, (state, action) => {
+        state.adminWallet.submitting = false;
+        state.adminWallet.error =
+          action.payload || "Failed to approve withdrawal";
       });
   },
 });

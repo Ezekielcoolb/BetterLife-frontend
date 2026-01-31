@@ -388,6 +388,7 @@ export default function BusinessReport() {
         loanCount: acc.loanCount + (week.loanCount || 0),
         totalDisbursed: acc.totalDisbursed + (week.totalDisbursed || 0),
         totalLoanAppForm: acc.totalLoanAppForm + (week.totalLoanAppForm || 0),
+        totalInsurance: acc.totalInsurance + (week.totalInsurance || 0),
         totalInterest: acc.totalInterest + (week.totalInterest || 0),
         totalExpenses: acc.totalExpenses + (week.totalExpenses || 0),
         profit: acc.profit + (week.profit || 0),
@@ -396,6 +397,7 @@ export default function BusinessReport() {
         loanCount: 0,
         totalDisbursed: 0,
         totalLoanAppForm: 0,
+        totalInsurance: 0,
         totalInterest: 0,
         totalExpenses: 0,
         profit: 0,
@@ -482,6 +484,15 @@ export default function BusinessReport() {
             <TrendingUp className="h-5 w-5 text-violet-500" />
           </div>
           <p className="mt-1 text-xs text-slate-400">Total form charges for the selected month</p>
+        </article>
+
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Insurance</p>
+          <div className="mt-2 flex items-baseline justify-between">
+            <p className="text-2xl font-semibold text-slate-900">{formatCurrency(monthlyTotals.totalInsurance)}</p>
+            <TrendingUp className="h-5 w-5 text-indigo-500" />
+          </div>
+          <p className="mt-1 text-xs text-slate-400">Total insurance fees for the selected month</p>
         </article>
 
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -628,6 +639,9 @@ export default function BusinessReport() {
                     Cards &amp; Others
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Insurance
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Total Interest
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -662,6 +676,9 @@ export default function BusinessReport() {
                     </td>
                     <td className="px-4 py-3 text-right text-slate-700">
                       {formatCurrency(day.totalLoanAppForm || 0)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-700">
+                      {formatCurrency(day.totalInsurance || 0)}
                     </td>
                     <td className="px-4 py-3 text-right text-slate-700">
                       {formatCurrency(day.totalInterest || 0)}

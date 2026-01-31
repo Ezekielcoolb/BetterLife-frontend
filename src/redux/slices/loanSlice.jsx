@@ -36,6 +36,7 @@ const initialState = {
   formCollectionSummary: {
     totalCustomers: 0,
     totalLoanAppForm: 0,
+    totalInsuranceFee: 0,
   },
   formCollectionLoading: false,
   formCollectionError: null,
@@ -43,6 +44,18 @@ const initialState = {
   totalOutstanding: 0,
   outstandingLoading: false,
   outstandingError: null,
+  walletSummary: null,
+  walletCso: null,
+  walletLoading: false,
+  walletError: null,
+  walletBonusBreakdown: {
+    basePerformanceBonus: 0,
+    overshootBonus: 0,
+  },
+  overshootMetrics: null,
+  overshootLoading: false,
+  overshootError: null,
+  overshootSyncing: false,
   categoryCounts: {
     all: 0,
     active: 0,
@@ -100,6 +113,115 @@ export const fetchCsoLoans = createAsyncThunk(
       return rejectWithValue(extractErrorMessage(error, "Unable to fetch loans"));
     }
   }
+);
+
+export const fetchCsoWallet = createAsyncThunk(
+  "loan/fetchCsoWallet",
+  async (_, { getState, rejectWithValue }) => {
+    const state = getState();
+    const token = state.csoAuth?.token || getStoredCsoAuth().token;
+
+    if (!token) {
+      return rejectWithValue("Unauthorized");
+    }
+
+    try {
+      axios.defaults.headers.common.Authorization = `Bearer ${token}`;
+      const response = await axios.get(`${API_BASE_URL}/api/csos/wallet`);
+      return response.data;
+    } catch (error) {
+      if (error.response?.status === 401) {
+        clearCsoAuth();
+        delete axios.defaults.headers.common.Authorization;
+        return rejectWithValue("Unauthorized");
+      }
+
+      return rejectWithValue(extractErrorMessage(error, "Unable to load wallet"));
+    }
+  }
+);
+
+export const fetchCsoOvershootMetrics = createAsyncThunk(
+  "loan/fetchCsoOvershootMetrics",
+  async ({ month, year } = {}, { getState, rejectWithValue }) => {
+    const state = getState();
+    const token = state.csoAuth?.token || getStoredCsoAuth().token;
+
+    if (!token) {
+      return rejectWithValue("Unauthorized");
+    }
+
+    try {
+      axios.defaults.headers.common.Authorization = `Bearer ${token}`;
+      const params = {};
+
+      if (month !== undefined && month !== null && month !== "") {
+        params.month = month;
+      }
+
+      if (year !== undefined && year !== null && year !== "") {
+        params.year = year;
+      }
+
+      const response = await axios.get(`${API_BASE_URL}/api/csos/overshoot`, {
+        params,
+      });
+
+      return response.data?.data || null;
+    } catch (error) {
+      if (error.response?.status === 401) {
+        clearCsoAuth();
+        delete axios.defaults.headers.common.Authorization;
+        return rejectWithValue("Unauthorized");
+      }
+
+      return rejectWithValue(
+        extractErrorMessage(error, "Unable to fetch overshoot metrics"),
+      );
+    }
+  },
+);
+
+export const syncCsoOvershootMetrics = createAsyncThunk(
+  "loan/syncCsoOvershootMetrics",
+  async ({ month, year } = {}, { getState, rejectWithValue }) => {
+    const state = getState();
+    const token = state.csoAuth?.token || getStoredCsoAuth().token;
+
+    if (!token) {
+      return rejectWithValue("Unauthorized");
+    }
+
+    try {
+      axios.defaults.headers.common.Authorization = `Bearer ${token}`;
+      const payload = {};
+
+      if (month !== undefined && month !== null && month !== "") {
+        payload.month = month;
+      }
+
+      if (year !== undefined && year !== null && year !== "") {
+        payload.year = year;
+      }
+
+      const response = await axios.post(
+        `${API_BASE_URL}/api/csos/overshoot/sync`,
+        payload,
+      );
+
+      return response.data?.data || null;
+    } catch (error) {
+      if (error.response?.status === 401) {
+        clearCsoAuth();
+        delete axios.defaults.headers.common.Authorization;
+        return rejectWithValue("Unauthorized");
+      }
+
+      return rejectWithValue(
+        extractErrorMessage(error, "Unable to synchronize overshoot metrics"),
+      );
+    }
+  },
 );
 
 export const submitLoanEdit = createAsyncThunk(
@@ -611,6 +733,7 @@ const loanSlice = createSlice({
         state.formCollectionSummary = action.payload?.summary || {
           totalCustomers: 0,
           totalLoanAppForm: 0,
+          totalInsuranceFee: 0,
         };
       })
       .addCase(fetchCsoFormCollection.rejected, (state, action) => {
@@ -620,6 +743,7 @@ const loanSlice = createSlice({
           state.formCollectionSummary = {
             totalCustomers: 0,
             totalLoanAppForm: 0,
+            totalInsuranceFee: 0,
           };
         }
         state.formCollectionError = action.payload || "Unable to fetch form collection";
@@ -661,6 +785,61 @@ const loanSlice = createSlice({
       .addCase(fetchCsoLoanCounts.rejected, (state, action) => {
         state.categoryCountsLoading = false;
         state.categoryCountsError = action.payload || "Unable to fetch loan counts";
+      })
+      .addCase(fetchCsoWallet.pending, (state) => {
+        state.walletLoading = true;
+        state.walletError = null;
+      })
+      .addCase(fetchCsoWallet.fulfilled, (state, action) => {
+        state.walletLoading = false;
+        state.walletSummary = action.payload?.summary || null;
+        state.walletCso = action.payload?.cso || null;
+        state.walletBonusBreakdown = {
+          basePerformanceBonus:
+            action.payload?.summary?.performance?.basePerformanceBonus || 0,
+          overshootBonus:
+            action.payload?.summary?.performance?.overshootBonus || 0,
+        };
+      })
+      .addCase(fetchCsoWallet.rejected, (state, action) => {
+        state.walletLoading = false;
+        if (action.payload === "Unauthorized") {
+          state.walletSummary = null;
+          state.walletCso = null;
+        }
+        state.walletError = action.payload || "Unable to load wallet";
+      })
+      .addCase(fetchCsoOvershootMetrics.pending, (state) => {
+        state.overshootLoading = true;
+        state.overshootError = null;
+      })
+      .addCase(fetchCsoOvershootMetrics.fulfilled, (state, action) => {
+        state.overshootLoading = false;
+        state.overshootMetrics = action.payload;
+      })
+      .addCase(fetchCsoOvershootMetrics.rejected, (state, action) => {
+        state.overshootLoading = false;
+        if (action.payload === "Unauthorized") {
+          state.overshootMetrics = null;
+        }
+        state.overshootError = action.payload || "Unable to fetch overshoot metrics";
+      })
+      .addCase(syncCsoOvershootMetrics.pending, (state) => {
+        state.overshootSyncing = true;
+        state.overshootError = null;
+      })
+      .addCase(syncCsoOvershootMetrics.fulfilled, (state, action) => {
+        state.overshootSyncing = false;
+        if (action.payload) {
+          state.overshootMetrics = action.payload;
+        }
+      })
+      .addCase(syncCsoOvershootMetrics.rejected, (state, action) => {
+        state.overshootSyncing = false;
+        if (action.payload === "Unauthorized") {
+          state.overshootMetrics = null;
+        }
+        state.overshootError = action.payload || "Unable to synchronize overshoot metrics";
       })
       .addCase(fetchDashboardStats.pending, (state) => {
         state.dashboardStatsLoading = true;

@@ -3,19 +3,63 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
+import { Line } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from "chart.js";
 import {
   fetchCsoById,
   updateCso,
   changeCsoStatus,
   clearCsoError,
   resolveCsoRemittance,
+  fetchAdminCsoWallet,
+  approveCsoWalletWithdrawal,
 } from "../../../redux/slices/csoSlice";
 import { fetchBranches } from "../../../redux/slices/branchSlice";
-import { ChevronLeft, ChevronRight, CheckCircle, AlertCircle, X, ExternalLink, Loader2 } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle,
+  AlertCircle,
+  X,
+  ExternalLink,
+  Loader2,
+  Sparkles,
+  ShieldAlert,
+  AlertTriangle,
+  Wallet,
+  Coins,
+  PiggyBank,
+  HandCoins,
+  ShieldCheck,
+  TrendingUp,
+  Zap,
+  Lock,
+} from "lucide-react";
 import CsoLoansTab from "./CsoLoansTab";
 import CsoCustomersTab from "./CsoCustomersTab";
 import CsoCollectionTab from "./CsoCollectionTab";
 import CsoDashboardTab from "./CsoDashboardTab";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+);
 
 const editableFields = [
   "firstName",
@@ -50,6 +94,59 @@ const formatCurrency = (value) => {
     }).format(num);
 };
 
+const OUTLINE_CLASSES = {
+  indigo: "border-indigo-500/40 bg-indigo-50 text-indigo-600",
+  emerald: "border-emerald-500/40 bg-emerald-50 text-emerald-600",
+  rose: "border-rose-500/40 bg-rose-50 text-rose-600",
+  amber: "border-amber-500/40 bg-amber-50 text-amber-600",
+  violet: "border-violet-500/40 bg-violet-50 text-violet-600",
+  slate: "border-slate-200 bg-slate-100 text-slate-600",
+  white: "border-white/30 bg-white/20 text-white",
+};
+
+const OutlinePill = ({ tone = "slate", children }) => {
+  const toneClass = OUTLINE_CLASSES[tone] || OUTLINE_CLASSES.slate;
+  return (
+    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${toneClass}`}>
+      {children}
+    </span>
+  );
+};
+
+const MetricCard = ({ icon: Icon, label, value, hint, accent = "bg-indigo-500" }) => (
+  <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className={`absolute inset-x-6 top-0 h-20 rounded-full ${accent} opacity-10 blur-3xl`} />
+    <div className="relative space-y-4">
+      <div className="flex items-center justify-between gap-4">
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+          <p className="text-2xl font-bold text-slate-900">{value}</p>
+        </div>
+        <div className="rounded-2xl bg-slate-100 p-3 text-slate-600">
+          <Icon className="h-6 w-6" />
+        </div>
+      </div>
+      {hint && <p className="text-xs text-slate-400">{hint}</p>}
+    </div>
+  </div>
+);
+
+const WalletActivityItem = ({ loan }) => (
+  <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="flex items-center justify-between text-sm font-semibold text-slate-800">
+      <span>{loan.loanId || "Loan"}</span>
+      <OutlinePill tone="rose">{formatCurrency(loan.balance)}</OutlinePill>
+    </div>
+    <p className="text-sm text-slate-500">{loan.customerName || "Customer"}</p>
+    <div className="flex items-center justify-between text-xs text-slate-400">
+      <span>
+        Disbursed: {loan.disbursedAt ? new Date(loan.disbursedAt).toLocaleDateString() : "—"}
+      </span>
+      <span className="font-semibold text-rose-500">{loan.daysPast} days past recovery</span>
+    </div>
+  </div>
+);
+
 export default function CsoDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -61,8 +158,11 @@ export default function CsoDetails() {
     saving,
     resolvingRemittance,
     error,
+    adminWallet,
   } = useSelector((state) => state.cso);
   const { items: branches } = useSelector((state) => state.branch);
+
+  const selectedId = selected?._id;
 
   const [activeTab, setActiveTab] = useState("details");
   const [formData, setFormData] = useState(null);
@@ -73,6 +173,236 @@ export default function CsoDetails() {
   const [resolveModalOpen, setResolveModalOpen] = useState(false);
   const [resolveData, setResolveData] = useState({ date: "", message: "" });
   const [imageModal, setImageModal] = useState(null);
+  const walletLoading = adminWallet.loading;
+  const walletSubmitting = adminWallet.submitting;
+  const walletError = adminWallet.error;
+  const walletSummary = adminWallet.summary;
+  const walletCso = adminWallet.cso;
+  const lastWithdrawal = adminWallet.lastWithdrawal;
+  const walletBonusBreakdown = adminWallet.bonusBreakdown;
+  const lastWithdrawalBreakdown = adminWallet.lastWithdrawalBreakdown;
+
+  const performance = walletSummary?.performance || {};
+  const operational = walletSummary?.operational || {};
+  const deductionLoans = performance.deductionLoans || [];
+  const historyLabels = performance.history?.labels || [];
+  const historyEarned = performance.history?.earned || [];
+  const historyDeductions = performance.history?.deductions || [];
+  const hasHistory =
+    historyLabels.length > 0 &&
+    historyEarned.length === historyLabels.length &&
+    historyDeductions.length === historyLabels.length;
+
+  const chartData = useMemo(() => {
+    if (!hasHistory) return null;
+
+    return {
+      labels: historyLabels,
+      datasets: [
+        {
+          label: "Earned Bonus",
+          data: historyEarned.map((value) => value ?? 0),
+          borderColor: "#2563eb",
+          backgroundColor: "rgba(37, 99, 235, 0.15)",
+          tension: 0.35,
+          fill: true,
+          pointRadius: 3,
+          pointBackgroundColor: "#2563eb",
+        },
+        {
+          label: "Recovery",
+          data: historyLabels.map((_, index) => -Math.abs(historyDeductions[index] ?? 0)),
+          borderColor: "#f97316",
+          backgroundColor: "rgba(249, 115, 22, 0.15)",
+          tension: 0.35,
+          fill: true,
+          pointRadius: 3,
+          pointBackgroundColor: "#f97316",
+        },
+      ],
+    };
+  }, [hasHistory, historyLabels, historyEarned, historyDeductions]);
+
+  const chartOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: "top",
+          labels: {
+            font: {
+              family: "'Poppins', 'Inter', sans-serif",
+              size: 12,
+            },
+          },
+        },
+        tooltip: {
+          callbacks: {
+            label: (context) => {
+              const value = Math.abs(context.parsed.y || 0);
+              const label = context.dataset.label || "";
+              return `${label}: ${formatCurrency(value)}`;
+            },
+          },
+        },
+      },
+      scales: {
+        y: {
+          ticks: {
+            callback: (value) => formatCurrency(Math.abs(value || 0)),
+          },
+          grid: {
+            color: "rgba(148, 163, 184, 0.15)",
+          },
+        },
+        x: {
+          ticks: {
+            font: {
+              family: "'Poppins', 'Inter', sans-serif",
+            },
+          },
+          grid: {
+            display: false,
+          },
+        },
+      },
+    }),
+    [],
+  );
+
+  const walletSummaryReady = Boolean(walletSummary);
+  const csoName = walletCso
+    ? `${walletCso.firstName || ""} ${walletCso.lastName || ""}`.trim()
+    : `${selected?.firstName || ""} ${selected?.lastName || ""}`.trim();
+  const branchLabel = walletCso?.branch || selected?.branch || "";
+  const asOfDate = performance.asOf
+    ? new Date(performance.asOf).toLocaleDateString()
+    : null;
+
+  const totalBonus = Number(performance.totalBonus) || 0;
+  const basePerformanceBonus = Number(
+    performance.basePerformanceBonus ?? walletBonusBreakdown?.basePerformanceBonus ?? 0,
+  );
+  const overshootBonusAggregate = Number(
+    performance.overshootBonus ?? walletBonusBreakdown?.overshootBonus ?? 0,
+  );
+  const deductionTotal = Number(performance.deductionTotal) || 0;
+  
+  // Robust Recalculation
+  const remainingBonus = Math.max(totalBonus - deductionTotal, 0);
+  const withdrawable = Number((remainingBonus * 0.7).toFixed(2));
+  const lockedPortion = Math.max(remainingBonus - withdrawable, 0);
+
+  const deductionCount = Number(performance.deductionLoanCount) || deductionLoans.length || 0;
+  const readyToTransfer = Math.max(remainingBonus - deductionTotal, 0); // Note: This might need adjustment based on business rules but keeping standard
+  const heldForRecoveries = Math.max(remainingBonus - withdrawable, 0);
+  const operationalBalance = Number(operational.balance) || 0;
+
+  const lastWithdrawalLabel = typeof lastWithdrawal === "number" && lastWithdrawal > 0
+    ? formatCurrency(lastWithdrawal)
+    : null;
+  const lastWithdrawalPerformance = Number(lastWithdrawalBreakdown?.performance || 0);
+  const lastWithdrawalOvershoot = Number(lastWithdrawalBreakdown?.overshoot || 0);
+
+  const walletOverlay = walletLoading
+    ? (
+        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-4xl bg-white/70 backdrop-blur-sm">
+          <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+        </div>
+      )
+    : null;
+
+  const isDecemberWindow = new Date().getMonth() === 11;
+  const withdrawDisabled = walletSubmitting || walletLoading || withdrawable <= 0.01 || !isDecemberWindow;
+
+  const performanceCards = [
+    {
+      label: "Total Bonus Pool",
+      value: formatCurrency(totalBonus),
+      icon: Sparkles,
+      accent: "bg-indigo-500",
+      hint: "Combined performance and overshoot bonuses accrued so far.",
+    },
+    {
+      label: "Performance Bonus",
+      value: formatCurrency(basePerformanceBonus),
+      icon: TrendingUp,
+      accent: "bg-emerald-600",
+      hint: "Performance Bonus is guaranteed by your repayment efficiency.",
+    },
+    {
+      label: "Overshoot Bonus (1%)",
+      value: formatCurrency(overshootBonusAggregate),
+      icon: Zap,
+      accent: "bg-rose-600",
+      hint: overshootBonusAggregate > 0
+        ? "Residual 1% pool after prior overshoot payouts."
+        : "Disburse beyond 100 loans monthly to grow this bucket.",
+    },
+    {
+      label: "Recovery Deductions",
+      value: formatCurrency(deductionTotal),
+      icon: ShieldAlert,
+      accent: "bg-amber-600",
+      hint: "Outstanding balances on loans 45+ days past disbursement.",
+    },
+    {
+      label: "Remaining Bonus",
+      value: formatCurrency(remainingBonus),
+      icon: Coins,
+      accent: "bg-sky-500",
+      hint: "Bonus pool available after recovery deductions.",
+    },
+    {
+      label: "Available to Withdraw",
+      value: formatCurrency(withdrawable),
+      icon: Wallet,
+      accent: "bg-emerald-500",
+      hint: "Exactly 70% of the remaining bonus, releasable on approval.",
+    },
+    {
+      label: "Held for Future",
+      value: formatCurrency(lockedPortion),
+      icon: Lock,
+      accent: "bg-slate-500",
+      hint: "Portion (30%) retained until recoveries clear or next payout window.",
+    },
+  ];
+
+  const topPerformanceCards = performanceCards.slice(0, 4);
+  const bottomPerformanceCards = performanceCards.slice(4);
+
+  const operationalCards = [
+    // {
+    //   label: "Operational Balance",
+    //   value: formatCurrency(operationalBalance),
+    //   icon: PiggyBank,
+    //   accent: "bg-indigo-500",
+    //   hint: "Funds already sitting in the operational wallet.",
+    // },
+    {
+      label: "Annual Release (70%)",
+      value: formatCurrency(withdrawable),
+      icon: HandCoins,
+      accent: "bg-emerald-500",
+      hint: "Amount queued to move from performance once approved.",
+    },
+    {
+      label: "Held for Recoveries",
+      value: formatCurrency(heldForRecoveries),
+      icon: ShieldCheck,
+      accent: "bg-rose-500",
+      hint: "Bonus still restricted due to recovery accounts.",
+    },
+    {
+      label: "Transfer-ready Bonus",
+      value: formatCurrency(readyToTransfer),
+      icon: HandCoins,
+      accent: "bg-violet-500",
+      hint: "Portion that could move to operations once deductions clear.",
+    },
+  ];
 
   useEffect(() => {
     dispatch(fetchCsoById(id));
@@ -83,6 +413,12 @@ export default function CsoDetails() {
       dispatch(fetchBranches());
     }
   }, [branches.length, dispatch]);
+
+  useEffect(() => {
+    if (activeTab === "wallet" && selectedId) {
+      dispatch(fetchAdminCsoWallet({ csoId: selectedId }));
+    }
+  }, [activeTab, selectedId, dispatch]);
 
   useEffect(() => {
     if (error) {
@@ -230,6 +566,37 @@ export default function CsoDetails() {
       setResolveModalOpen(true);
   };
 
+  const handleRefreshWallet = () => {
+    if (!selectedId) return;
+    dispatch(fetchAdminCsoWallet({ csoId: selectedId }));
+  };
+
+  const handleApproveWalletWithdrawal = async () => {
+    if (!selectedId || walletSubmitting || !isDecemberWindow) {
+      if (!isDecemberWindow) {
+        toast.info("Withdrawals can only be approved during December.");
+      }
+      return;
+    }
+
+    try {
+      const result = await dispatch(
+        approveCsoWalletWithdrawal({ csoId: selectedId })
+      ).unwrap();
+
+      const amount = Number(result?.amount) || 0;
+      if (amount > 0) {
+        toast.success(`Approved withdrawal of ${formatCurrency(amount)} for ${selected?.firstName || "the CSO"}.`);
+      } else {
+        toast.success("Withdrawal processed successfully.");
+      }
+
+      handleRefreshWallet();
+    } catch (err) {
+      toast.error(typeof err === "string" ? err : "Failed to approve withdrawal");
+    }
+  };
+
   if (detailLoading || !selected || !formData) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -346,6 +713,16 @@ export default function CsoDetails() {
                 }`}
             >
                 Details
+            </button>
+            <button
+                onClick={() => setActiveTab("wallet")}
+                className={`border-b-2 py-4 text-sm font-medium ${
+                    activeTab === "wallet"
+                        ? "border-indigo-500 text-indigo-600"
+                        : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700"
+                }`}
+            >
+                Wallet
             </button>
             <button
                 onClick={() => setActiveTab("remittance")}
@@ -765,6 +1142,212 @@ export default function CsoDetails() {
                 </form>
             </section>
           </>
+      ) : activeTab === "wallet" ? (
+          <section className="space-y-8">
+            {walletLoading && !walletSummaryReady ? (
+              <div className="flex h-[40vh] items-center justify-center rounded-3xl border border-slate-200 bg-white">
+                <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+              </div>
+            ) : !walletLoading && walletError && !walletSummaryReady ? (
+              <div className="rounded-3xl border border-rose-200 bg-rose-50 p-6 text-center text-rose-600">
+                <AlertCircle className="mx-auto mb-3 h-8 w-8" />
+                <p className="font-semibold">{walletError}</p>
+                <p className="mt-1 text-xs text-rose-500">Attempt the request again or confirm the CSO still has an active wallet.</p>
+                <button
+                  type="button"
+                  onClick={handleRefreshWallet}
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700"
+                >
+                  Refresh wallet
+                </button>
+              </div>
+            ) : walletSummaryReady ? (
+              <>
+                <div className="relative mx-auto w-full max-w-6xl overflow-hidden rounded-4xl bg-gradient-to-br from-slate-900 via-indigo-900 to-blue-700 p-6 text-white shadow-xl sm:p-8">
+                  <div className="absolute inset-0 opacity-25">
+                    <div className="h-full w-full bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.45),transparent_60%)]" />
+                  </div>
+                  <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="space-y-4 text-center lg:text-left">
+                      <OutlinePill tone="white">
+                        {csoName || "Wallet overview"}
+                        {branchLabel ? ` • ${branchLabel}` : ""}
+                      </OutlinePill>
+                      <h2 className="text-3xl font-semibold md:text-4xl">Monitor and approve this CSO's incentive movement.</h2>
+                      <p className="mx-auto max-w-2xl text-sm text-indigo-100/90 lg:mx-0">
+                        Bonuses accrue in the performance wallet. 70% of the unlocked balance becomes eligible for transfer to operations once recoveries are under control.
+                        Review the deductions list before approving withdrawals.
+                      </p>
+                      {asOfDate && (
+                        <OutlinePill tone="white">Figures updated on {asOfDate}</OutlinePill>
+                      )}
+                    </div>
+                    <div className="max-w-sm rounded-3xl border border-white/20 bg-white/10 p-6 text-left backdrop-blur">
+                      <span className="text-xs uppercase tracking-wide text-indigo-100/70">Withdrawable (70%)</span>
+                      <p className="mt-2 text-3xl font-semibold text-white">{formatCurrency(withdrawable)}</p>
+                      <p className="mt-3 text-xs text-indigo-100/80">
+                        Exactly 70% of the unlocked bonus. The remaining 30% stays reserved until every recovery loan is resolved or the next payout window opens.
+                      </p>
+                      <div className="mt-4 flex items-center gap-2 text-sm text-indigo-100">
+                        <TrendingUp className="h-5 w-5 text-emerald-200" />
+                        <span>{formatCurrency(totalBonus)} earned in total bonuses.</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 rounded-3xl border border-slate-200 bg-white/60 p-4 backdrop-blur md:flex-row md:items-center md:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <OutlinePill tone="indigo">{deductionCount} recovery loans impacting bonus</OutlinePill>
+                    <OutlinePill tone="emerald">{formatCurrency(remainingBonus)} unlocked balance</OutlinePill>
+                    {lastWithdrawalLabel && (
+                      <OutlinePill tone="amber">Last approval: {lastWithdrawalLabel}</OutlinePill>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleRefreshWallet}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                    >
+                      Refresh wallet
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleApproveWalletWithdrawal}
+                      disabled={withdrawDisabled}
+                      className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400"
+                    >
+                      {walletSubmitting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Processing…
+                        </>
+                      ) : (
+                        "Approve 70% withdrawal"
+                      )}
+                    </button>
+                    {!isDecemberWindow && (
+                      <OutlinePill tone="slate">Available in December</OutlinePill>
+                    )}
+                  </div>
+                </div>
+
+                <div className="relative mx-auto w-full max-w-6xl rounded-4xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 md:p-8">
+                  {walletOverlay}
+                  <div className="space-y-10">
+                    <div className="space-y-4">
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        {topPerformanceCards.map((card) => (
+                          <MetricCard key={card.label} {...card} />
+                        ))}
+                      </div>
+                      {bottomPerformanceCards.length > 0 && (
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                          {bottomPerformanceCards.map((card) => (
+                            <MetricCard key={card.label} {...card} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid gap-6 lg:grid-cols-2">
+                      <div className="min-w-0 rounded-3xl border border-slate-100 bg-slate-50 p-4 sm:p-6">
+                        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <h2 className="text-base font-semibold text-slate-900">Bonus timeline</h2>
+                            <p className="text-xs text-slate-500">Monitor how incentives are earned, locked, and released every month.</p>
+                          </div>
+                          <OutlinePill tone="indigo">Performance history</OutlinePill>
+                        </div>
+                        <div className="relative h-56 w-full sm:h-64">
+                          {chartData ? (
+                            <Line data={chartData} options={chartOptions} className="!h-full !w-full" />
+                          ) : (
+                            <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white text-sm text-slate-400">
+                              No performance history yet. Once bonuses post, your trend will appear here.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-4 rounded-3xl border border-slate-100 bg-slate-50 p-4 sm:p-6">
+                        <div>
+                          <h2 className="text-base font-semibold text-slate-900">Recovery deductions</h2>
+                          <p className="text-xs text-slate-500">Loans 45+ days past disbursement.</p>
+                        </div>
+                        <div className="space-y-3">
+                          {deductionLoans.length > 0 ? (
+                            deductionLoans.slice(0, 5).map((loan) => (
+                              <WalletActivityItem key={loan.id || loan.loanId} loan={loan} />
+                            ))
+                          ) : (
+                            <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-600">
+                              Fantastic! No loans are currently locking this CSO's bonus.
+                            </div>
+                          )}
+                        </div>
+                        {deductionLoans.length > 5 && (
+                          <p className="text-xs text-slate-400">Showing the first five loans. Resolve recoveries to release the rest.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-6 lg:grid-cols-3">
+                      <div className="rounded-3xl border border-slate-100 bg-slate-50 p-6">
+                        <h3 className="text-base font-semibold text-slate-900">Approval checklist</h3>
+                        <ul className="mt-4 space-y-3 text-sm text-slate-600">
+                          <li className="flex gap-3">
+                            <span className="mt-1 block h-2 w-2 rounded-full bg-indigo-500" />
+                            <p>Confirm recoveries are actively being managed for all loans listed above before releasing funds.</p>
+                          </li>
+                          <li className="flex gap-3">
+                            <span className="mt-1 block h-2 w-2 rounded-full bg-emerald-500" />
+                            <p>Ensure branch cash availability or operational budget can absorb the transfer.</p>
+                          </li>
+                          <li className="flex gap-3">
+                            <span className="mt-1 block h-2 w-2 rounded-full bg-rose-500" />
+                            <p>Document approval in the finance log after processing the transfer.</p>
+                          </li>
+                        </ul>
+                      </div>
+
+                      <div className="rounded-3xl border border-slate-100 bg-slate-50 p-6">
+                        <h3 className="text-base font-semibold text-slate-900">Operational wallet outlook</h3>
+                        <div className="mt-4 space-y-3">
+                          {operationalCards.map((card) => (
+                            <MetricCard key={card.label} {...card} />
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-3xl border border-slate-100 bg-slate-50 p-6">
+                        <h3 className="text-base font-semibold text-slate-900">Supporting actions</h3>
+                        <ul className="mt-4 space-y-3 text-sm text-slate-600">
+                          <li>
+                            <OutlinePill tone="emerald">Coach CSO</OutlinePill>
+                            <p className="mt-1 text-xs text-slate-500">Share feedback on recovery accounts so the CSO keeps bonuses unlocked.</p>
+                          </li>
+                          <li>
+                            <OutlinePill tone="amber">Schedule payout</OutlinePill>
+                            <p className="mt-1 text-xs text-slate-500">Align withdrawals with quarterly finance runs for smoother reconciliation.</p>
+                          </li>
+                          <li>
+                            <OutlinePill tone="violet">Track history</OutlinePill>
+                            <p className="mt-1 text-xs text-slate-500">Log approvals to maintain a clear audit trail for regulatory reporting.</p>
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6 text-center text-slate-500">
+                Wallet data is not yet available for this CSO.
+              </div>
+            )}
+          </section>
       ) : activeTab === "dashboard" ? (
           <CsoDashboardTab csoId={id} />
       ) : activeTab === "collections" ? (

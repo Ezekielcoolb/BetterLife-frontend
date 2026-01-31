@@ -769,6 +769,9 @@ const adminLoanSlice = createSlice({
         state.waitingLoans = state.waitingLoans.map((loan) =>
           loan._id === action.payload._id ? action.payload : loan
         );
+        state.approvedLoans = state.approvedLoans.filter(
+          (loan) => loan._id !== action.payload._id
+        );
       })
       .addCase(requestLoanEdit.rejected, (state, action) => {
         state.updating = false;

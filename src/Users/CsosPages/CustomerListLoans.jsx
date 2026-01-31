@@ -68,10 +68,10 @@ export default function CustomerListLoans() {
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
 
-        <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+        {/* <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
           BVN:
           <span>{customerLoansBvn || bvn}</span>
-        </span>
+        </span> */}
       </div>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">

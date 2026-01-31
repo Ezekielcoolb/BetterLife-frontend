@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   submitLoan,
@@ -6,6 +6,8 @@ import {
   fetchCsoLoans,
   fetchCsoOutstandingLoans,
   submitLoanEdit,
+  fetchCsoOvershootMetrics,
+  syncCsoOvershootMetrics,
 } from "../../redux/slices/loanSlice";
 import { fetchMyApprovedGroupLeaders, createGroupLeader } from "../../redux/slices/groupLeaderSlice";
 import { uploadImages } from "../../redux/slices/uploadSlice";
@@ -267,7 +269,7 @@ const BUSINESS_FIELDS = [
   { key: "natureOfBusiness", label: "Nature of business", type: "text", placeholder: "Retail, services, etc." },
   { key: "address", label: "Business address", type: "text", colSpan: 2, placeholder: "Shop address" },
   { key: "yearsHere", label: "Years at location", type: "number", min: 0, placeholder: "0" },
-  { key: "nameKnown", label: "How well known is the name?", type: "text", placeholder: "Popular in the market" },
+  { key: "nameKnown", label: "Popular Name called at the business", type: "text", placeholder: "Popular in the business" },
   { key: "estimatedValue", label: "Estimated business value (₦)", type: "number", min: 0, placeholder: "" },
 ];
 
@@ -419,6 +421,11 @@ export default function CsoHome() {
   const { loans, loansPagination, loading, submitting, error } = useSelector((state) => state.loan);
   const { token, cso: csoAuth } = useSelector((state) => state.csoAuth);
   const { profile: csoProfile } = useSelector((state) => state.cso);
+  const {
+    overshootMetrics,
+    overshootLoading,
+    overshootSyncing,
+  } = useSelector((state) => state.loan);
   const { imageUploadLoading } = useSelector((state) => state.upload);
   const { totalOutstanding } = useSelector((state) => state.loan);
 
@@ -556,6 +563,17 @@ export default function CsoHome() {
       dispatch(fetchCsoProfile());
       dispatch(fetchMyApprovedGroupLeaders());
       dispatch(fetchCsoOutstandingLoans()); // Fetch outstanding loans for validation
+      const now = new Date();
+      const monthContext = { month: now.getMonth() + 1, year: now.getFullYear() };
+
+      (async () => {
+        try {
+          await dispatch(syncCsoOvershootMetrics(monthContext)).unwrap();
+        } catch (syncError) {
+          // ignore sync failure, fallback to fetching stored metrics
+        }
+        dispatch(fetchCsoOvershootMetrics(monthContext));
+      })();
     }
   }, [token, dispatch]);
 
@@ -678,6 +696,35 @@ export default function CsoHome() {
       dispatch(clearLoanError());
     }
   }, [error, dispatch]);
+
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    if (!isModalOpen || currentStep !== 3) {
+      return undefined;
+    }
+
+    const resizeAllSignaturePads = () => {
+      adjustSignatureCanvasForDevicePixelRatio(customerSignatureRef);
+      adjustSignatureCanvasForDevicePixelRatio(guarantorSignatureRef);
+    };
+
+    const scheduleResize = () => {
+      window.requestAnimationFrame(resizeAllSignaturePads);
+    };
+
+    scheduleResize();
+
+    window.addEventListener("resize", scheduleResize);
+    window.addEventListener("orientationchange", scheduleResize);
+
+    return () => {
+      window.removeEventListener("resize", scheduleResize);
+      window.removeEventListener("orientationchange", scheduleResize);
+    };
+  }, [isModalOpen, currentStep]);
 
   const handleNestedChange = (section, field) => (event) => {
     const { value } = event.target;
@@ -1047,6 +1094,54 @@ export default function CsoHome() {
     canvasRef.current?.clear();
   };
 
+  const adjustSignatureCanvasForDevicePixelRatio = (signatureRef) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const signaturePad = signatureRef.current;
+    if (!signaturePad) {
+      return;
+    }
+
+    const canvas = signaturePad.getCanvas?.();
+    if (!canvas) {
+      return;
+    }
+
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+    const rect = canvas.getBoundingClientRect();
+    const parent = canvas.parentElement;
+    const width = rect.width || parent?.offsetWidth || canvas.offsetWidth || canvas.width;
+    const height = rect.height || parent?.offsetHeight || canvas.offsetHeight || canvas.height;
+
+    if (!width || !height) {
+      return;
+    }
+
+    const drawingData = signaturePad.isEmpty() ? null : signaturePad.toData();
+
+    canvas.width = width * ratio;
+    canvas.height = height * ratio;
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return;
+    }
+
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.scale(ratio, ratio);
+
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+
+    if (drawingData && drawingData.length) {
+      signaturePad.fromData(drawingData);
+    } else {
+      signaturePad.clear();
+    }
+  };
+
   const removeUploadedMedia = (key) => {
     setForm((prev) => ({
       ...prev,
@@ -1324,7 +1419,13 @@ export default function CsoHome() {
             {business.natureOfBusiness || business.businessName || "Business type unavailable"}
           </p>
           <p className="text-xs font-semibold text-slate-600">
-            Loan type: <span className="capitalize">{loan?.loanDetails?.loanType || "—"}</span>
+           Loan balance: {
+
+    (loan?.loanDetails?.amountToBePaid || 0) -
+    (loan?.loanDetails?.amountPaidSoFar || 0)
+  
+}
+
           </p>
           {statusLabel === "fully paid" && (
             <button
@@ -1638,9 +1739,9 @@ export default function CsoHome() {
                 <div className="sticky -top-6 mb-4 flex items-center justify-between rounded-3xl bg-white/90 px-4 py-3">
                   <div>
                     <h2 className="text-lg font-semibold text-slate-900">Submit a new loan</h2>
-                    <p className="text-sm text-slate-500">
+                    {/* <p className="text-sm text-slate-500">
                       Capture borrower, business, and guarantor details. Form amount is fixed at ₦2,000 and insurance fee of ₦2,000.
-                    </p>
+                    </p> */}
                   </div>
                   <button
                     type="button"
@@ -1966,7 +2067,10 @@ export default function CsoHome() {
                             <SignatureCanvas
                               ref={customerSignatureRef}
                               penColor="#111827"
-                              canvasProps={{ className: "h-40 w-full rounded-xl border border-slate-200 bg-white" }}
+                              canvasProps={{
+                                className: "h-40 w-full rounded-xl border border-slate-200 bg-white",
+                                style: { touchAction: "none" },
+                              }}
                             />
 
                             <div className="flex items-center gap-3">
@@ -1984,10 +2088,15 @@ export default function CsoHome() {
                                     }),
                                   })
                                 }
-                                className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+                                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-70"
                                 disabled={isUploading}
                               >
-                                Upload signature
+                                {activeUploadTarget === "signature" ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Upload className="h-3.5 w-3.5" />
+                                )}
+                                {activeUploadTarget === "signature" ? "Uploading..." : "Upload signature"}
                               </button>
                               {form.pictures.signature && (
                                 <button
@@ -2024,7 +2133,10 @@ export default function CsoHome() {
                             <SignatureCanvas
                               ref={guarantorSignatureRef}
                               penColor="#111827"
-                              canvasProps={{ className: "h-40 w-full rounded-xl border border-slate-200 bg-white" }}
+                              canvasProps={{
+                                className: "h-40 w-full rounded-xl border border-slate-200 bg-white",
+                                style: { touchAction: "none" },
+                              }}
                             />
 
                             <div className="flex items-center gap-3">
@@ -2042,10 +2154,15 @@ export default function CsoHome() {
                                     }),
                                   })
                                 }
-                                className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+                                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-70"
                                 disabled={isUploading}
                               >
-                                Upload signature
+                                {activeUploadTarget === "guarantor-signature" ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Upload className="h-3.5 w-3.5" />
+                                )}
+                                {activeUploadTarget === "guarantor-signature" ? "Uploading..." : "Upload signature"}
                               </button>
                               {form.guarantorDetails.signature && (
                                 <button
@@ -2194,7 +2311,7 @@ export default function CsoHome() {
                   )}
 
                   <div className="flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                    <span className="text-sm text-slate-500">Form amount is automatically set to ₦2,000 for every loan.</span>
+                    {/* <span className="text-sm text-slate-500">Form amount is automatically set to ₦2,000 for every loan.</span> */}
                     <div className="flex flex-wrap items-center gap-3">
                       <button
                         type="button"

@@ -127,7 +127,7 @@ export default function AdminSignIn() {
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-slate-500">
+        {/* <p className="mt-6 text-center text-sm text-slate-500">
           Need to create an account?{" "}
           <Link
             to="/admin/signup"
@@ -135,7 +135,7 @@ export default function AdminSignIn() {
           >
             Set up admin access
           </Link>
-        </p>
+        </p> */}
       </div>
     </div>
   );

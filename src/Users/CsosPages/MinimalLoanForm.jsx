@@ -133,9 +133,9 @@ const BUSINESS_FIELD_CONFIG = [
   { key: "yearsHere", label: "Years at location", type: "number", min: 0 },
   {
     key: "nameKnown",
-    label: "How well known is the name?",
+    label: "Popular name called at business",
     type: "text",
-    placeholder: "Popular in the market",
+    placeholder: "Popular in the business",
   },
   {
     key: "estimatedValue",
@@ -909,7 +909,12 @@ export default function MinimalLoanForm() {
                     className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-400"
                     disabled={isUploading || submitting}
                   >
-                    <Upload className="h-3.5 w-3.5" /> Upload signature
+                    {activeUploadTarget === "signature" ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="h-3.5 w-3.5" />
+                    )}
+                    {activeUploadTarget === "signature" ? "Uploading..." : "Upload signature"}
                   </button>
 
                   {form.pictures.signature && (
@@ -969,7 +974,12 @@ export default function MinimalLoanForm() {
                     className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-400"
                     disabled={isUploading || submitting}
                   >
-                    <Upload className="h-3.5 w-3.5" /> Upload signature
+                    {activeUploadTarget === "guarantor-signature" ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="h-3.5 w-3.5" />
+                    )}
+                    {activeUploadTarget === "guarantor-signature" ? "Uploading..." : "Upload signature"}
                   </button>
 
                   {form.guarantorDetails.signature && (

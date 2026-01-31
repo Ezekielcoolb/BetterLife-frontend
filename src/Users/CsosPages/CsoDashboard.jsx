@@ -27,6 +27,7 @@ import {
   ArcElement,
   PointElement,
   LineElement,
+  LineController,
 } from "chart.js";
 import { Bar, Doughnut } from "react-chartjs-2";
 
@@ -39,7 +40,8 @@ ChartJS.register(
   Legend,
   ArcElement,
   PointElement,
-  LineElement
+  LineElement,
+  LineController
 );
 
 const ProgressBar = ({ label, current, target, color = "indigo" }) => {

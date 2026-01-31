@@ -45,6 +45,7 @@ import CsoReportDetails from "../Users/Admin/Report/CsoReport/CsoReportDetails";
 import BusinessReport from "../Users/Admin/Report/OtherReport/BusinessReport";
 import MonthlyReport from "../Users/Admin/Report/OtherReport/MonthlyReport";
 import AllLandingPage from "../GuestPages/LandingPage/AllLandingPage";
+import CsoWallet from "../Users/CsosPages/csoWallet";
 
 export default function Routess() {
     return (
@@ -100,6 +101,7 @@ export default function Routess() {
                         // { path: "/cso", element: <CsoDashboard /> },
                         { path: "/cso/dashboard", element: <CsoDashboard /> },
                         { path: "/cso", element: <CsoHome /> },
+                         { path: "/cso/wallet", element: <CsoWallet /> },
                         { path: "/cso/profile", element: <CsoProfile /> },
                         { path: "/cso/settings", element: <CsoSettings /> },
                          { path: "/cso/collections", element: <CsoCollection /> },

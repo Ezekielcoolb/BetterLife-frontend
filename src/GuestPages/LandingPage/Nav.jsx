@@ -13,13 +13,40 @@ export default function Nav() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLoginMenuOpen, setIsLoginMenuOpen] = useState(false);
   const loginMenuRef = useRef(null);
+  const loginMenuCloseTimeout = useRef(null);
 
   const handleToggleMenu = () => setIsMenuOpen((prev) => !prev);
   const handleNavigate = () => {
     setIsMenuOpen(false);
     setIsLoginMenuOpen(false);
   };
-  const handleLoginToggle = () => setIsLoginMenuOpen((prev) => !prev);
+  const clearLoginMenuCloseTimeout = () => {
+    if (loginMenuCloseTimeout.current) {
+      clearTimeout(loginMenuCloseTimeout.current);
+      loginMenuCloseTimeout.current = null;
+    }
+  };
+
+  const openLoginMenu = () => {
+    clearLoginMenuCloseTimeout();
+    setIsLoginMenuOpen(true);
+  };
+
+  const scheduleCloseLoginMenu = () => {
+    clearLoginMenuCloseTimeout();
+    loginMenuCloseTimeout.current = setTimeout(() => {
+      setIsLoginMenuOpen(false);
+    }, 180);
+  };
+
+  const handleLoginToggle = () => {
+    if (isLoginMenuOpen) {
+      setIsLoginMenuOpen(false);
+      clearLoginMenuCloseTimeout();
+    } else {
+      openLoginMenu();
+    }
+  };
 
   useEffect(() => {
     if (typeof document === "undefined") {
@@ -47,6 +74,7 @@ export default function Nav() {
     const handleClickOutside = (event) => {
       if (loginMenuRef.current && !loginMenuRef.current.contains(event.target)) {
         setIsLoginMenuOpen(false);
+        clearLoginMenuCloseTimeout();
       }
     };
 
@@ -56,6 +84,12 @@ export default function Nav() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isLoginMenuOpen]);
+
+  useEffect(() => {
+    return () => {
+      clearLoginMenuCloseTimeout();
+    };
+  }, []);
 
   return (
     <header className="fixed inset-x-0 top-0 z-50">
@@ -115,12 +149,12 @@ export default function Nav() {
             <div
               ref={loginMenuRef}
               className="relative"
-              onMouseEnter={() => setIsLoginMenuOpen(true)}
-              onMouseLeave={() => setIsLoginMenuOpen(false)}
-              onFocus={() => setIsLoginMenuOpen(true)}
+              onMouseEnter={openLoginMenu}
+              onMouseLeave={scheduleCloseLoginMenu}
+              onFocus={openLoginMenu}
               onBlur={(event) => {
                 if (!event.currentTarget.contains(event.relatedTarget)) {
-                  setIsLoginMenuOpen(false);
+                  scheduleCloseLoginMenu();
                 }
               }}
             >
@@ -206,32 +240,52 @@ export default function Nav() {
                       {item.label}
                     </a>
                   ))}
-                   <div className="mt-auto px-5 pb-4">
-                  <a
-                    href="#contact"
-                    onClick={handleNavigate}
-                    className="block rounded-full bg-[#1a3a52] px-4 py-3 text-center text-sm font-semibold text-white shadow-sm transition hover:bg-[#174061]"
-                  >
-                    Get Started
-                  </a>
-                </div>
-                <div className="  text-sm text-slate-600">
-                  <a href="mailto:support@betterlifeloan.com" className="flex items-center gap-3">
-                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#1a3a52]/10 text-[#1a3a52]">
-                      <Mail className="h-4 w-4" />
-                    </span>
-                    <span>support@betterlifeloan.com</span>
-                  </a>
-                  <a href="tel:+2347030303224" className="mt-3 flex items-center gap-3">
-                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#1a3a52]/10 text-[#1a3a52]">
-                      <Phone className="h-4 w-4" />
-                    </span>
-                    <span>+234 703 030 3224</span>
-                  </a>
-                </div>
-                </nav>
+                  <div className="space-y-3 px-5 py-4">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Log in</p>
+                      <div className="mt-3 space-y-2">
+                        <a
+                          href="/cso/login"
+                          onClick={handleNavigate}
+                          className="flex w-full items-center justify-between rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-600 shadow-sm transition hover:text-[#1a3a52]"
+                        >
+                          <span>CSO Login</span>
+                          <ChevronDown className="h-4 w-4 rotate-[-90deg] text-slate-400" aria-hidden />
+                        </a>
+                        <a
+                          href="/admin/signin"
+                          onClick={handleNavigate}
+                          className="flex w-full items-center justify-between rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-600 shadow-sm transition hover:text-[#1a3a52]"
+                        >
+                          <span>Admin Login</span>
+                          <ChevronDown className="h-4 w-4 rotate-[-90deg] text-slate-400" aria-hidden />
+                        </a>
+                      </div>
+                    </div>
 
-               
+                    {/* <a
+                      href="#contact"
+                      onClick={handleNavigate}
+                      className="block rounded-full bg-[#1a3a52] px-4 py-3 text-center text-sm font-semibold text-white shadow-sm transition hover:bg-[#174061]"
+                    >
+                      Get Started
+                    </a> */}
+                  </div>
+                  <div className="px-5 pb-4 text-sm text-slate-600">
+                    <a href="mailto:support@betterlifeloan.com" className="flex items-center gap-3">
+                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#1a3a52]/10 text-[#1a3a52]">
+                        <Mail className="h-4 w-4" />
+                      </span>
+                      <span>support@betterlifeloan.com</span>
+                    </a>
+                    <a href="tel:+2347030303224" className="mt-3 flex items-center gap-3">
+                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#1a3a52]/10 text-[#1a3a52]">
+                        <Phone className="h-4 w-4" />
+                      </span>
+                      <span>+234 703 030 3224</span>
+                    </a>
+                  </div>
+                </nav>
               </div>
             </aside>
           </div>

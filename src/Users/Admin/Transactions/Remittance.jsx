@@ -103,6 +103,8 @@ export default function AdminRemittance() {
 
   const [customDate, setCustomDate] = useState(lastQuery?.date || "");
   const [currentMonth, setCurrentMonth] = useState(initialMonth);
+  const [showProofModal, setShowProofModal] = useState(false);
+  const [selectedProofImage, setSelectedProofImage] = useState("");
   const appliedQueryRef = useRef(lastQuery);
 
   const currentYear = currentMonth.getFullYear();
@@ -804,14 +806,16 @@ export default function AdminRemittance() {
 
                            <td className="px-4 py-3 text-center">
                             {partial.image ? (
-                              <a
-                                href={partial.image}
-                                target="_blank"
-                                rel="noreferrer"
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedProofImage(partial.image);
+                                  setShowProofModal(true);
+                                }}
                                 className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-[10px] font-medium text-indigo-600 transition hover:bg-indigo-100"
                               >
                                 <ImageIcon className="h-3 w-3" /> View
-                              </a>
+                              </button>
                             ) : (
                               <span className="text-xs text-slate-400">—</span>
                             )}
@@ -836,14 +840,16 @@ export default function AdminRemittance() {
                       
                       <td className="px-4 py-3 text-center">
                         {record.image ? (
-                          <a
-                            href={record.image}
-                            target="_blank"
-                            rel="noreferrer"
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedProofImage(record.image);
+                              setShowProofModal(true);
+                            }}
                             className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-[10px] font-medium text-indigo-600 transition hover:bg-indigo-100"
                           >
                             <ImageIcon className="h-3 w-3" /> View
-                          </a>
+                          </button>
                         ) : (
                           <span className="text-xs text-slate-400">—</span>
                         )}
@@ -903,6 +909,43 @@ export default function AdminRemittance() {
         </footer>
       </section>
 
+      {showProofModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="relative flex w-full max-w-4xl max-h-[90vh] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <header className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                  <ImageIcon className="h-4 w-4" />
+                </span>
+                <h3 className="font-semibold text-slate-900">Payment Proof Preview</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowProofModal(false)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </header>
+            <div className="flex-1 overflow-auto bg-slate-50 p-6 flex items-center justify-center">
+              <img
+                src={`https://api.betterlifeloan.com${selectedProofImage}`}
+                alt="Payment Proof"
+                className="max-h-full max-w-full rounded-xl shadow-md object-contain"
+              />
+            </div>
+            <footer className="border-t border-slate-100 bg-white px-6 py-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowProofModal(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                Close Preview
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

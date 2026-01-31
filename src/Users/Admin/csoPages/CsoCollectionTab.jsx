@@ -96,13 +96,17 @@ export default function CsoCollectionTab({ csoId }) {
     const totalFormCollection = Number(
       formCollection.summary.totalLoanAppForm || 0
     );
+    const totalInsuranceFee = Number(
+      formCollection.summary.totalInsuranceFee || 0
+    );
     const totalDue = Number(collection.summary.totalDue || 0);
 
     return {
       totalPaidToday,
       totalFormCollection,
+      totalInsuranceFee,
       totalDue,
-      combinedCollection: totalPaidToday + totalFormCollection,
+      combinedCollection: totalPaidToday + totalFormCollection + totalInsuranceFee,
       defaultingCount: Number(collection.summary.defaultingCount || 0),
     };
   }, [collection.summary, formCollection.summary]);
@@ -151,6 +155,12 @@ export default function CsoCollectionTab({ csoId }) {
           accent="from-indigo-500"
         />
         <SummaryCard
+          title="Insurance Fee"
+          value={formatCurrency(totals.totalInsuranceFee)}
+          description="Insurance premiums remitted"
+          accent="from-violet-500"
+        />
+        <SummaryCard
           title="Outstanding"
           value={formatCurrency(totals.totalDue)}
           description="Expected but not yet remitted"
@@ -162,6 +172,14 @@ export default function CsoCollectionTab({ csoId }) {
           description="Loans requiring follow-up"
           accent="from-rose-500"
         />
+      </div>
+
+      <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-2xl bg-indigo-50 p-6">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500">Total Day Collection</p>
+          <p className="text-2xl font-bold text-indigo-700">{formatCurrency(totals.combinedCollection)}</p>
+        </div>
+        <p className="text-sm text-indigo-600 font-medium">Sum of paid today, forms, and insurance.</p>
       </div>
 
       <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -246,9 +264,14 @@ export default function CsoCollectionTab({ csoId }) {
           <h4 className="text-base font-semibold text-slate-900">
             Form Collections
           </h4>
-          <span className="text-sm font-semibold text-indigo-600">
-            {formatCurrency(totals.totalFormCollection)} in forms collected
-          </span>
+            <div className="flex flex-col items-end">
+                <span className="text-sm font-semibold text-indigo-600">
+                Forms: {formatCurrency(totals.totalFormCollection)}
+                </span>
+                <span className="text-sm font-semibold text-violet-600">
+                Insurance: {formatCurrency(totals.totalInsuranceFee)}
+                </span>
+            </div>
         </div>
 
         {isLoading ? (
@@ -267,8 +290,9 @@ export default function CsoCollectionTab({ csoId }) {
                   <th className="px-4 py-3">Customer</th>
                   <th className="px-4 py-3">Group</th>
                   <th className="px-4 py-3">Leader</th>
-                  <th className="px-4 py-3 text-right">Form Fee</th>
-                  <th className="px-4 py-3 text-right">Disbursed</th>
+                   <th className="px-4 py-3 text-right">Form Fee</th>
+                   <th className="px-4 py-3 text-right">Insurance</th>
+                   <th className="px-4 py-3 text-right">Disbursed</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -286,10 +310,13 @@ export default function CsoCollectionTab({ csoId }) {
                     <td className="px-4 py-3 text-slate-600">
                       {record.leaderName || "—"}
                     </td>
-                    <td className="px-4 py-3 text-right font-semibold text-indigo-600">
-                      {formatCurrency(record.loanAppForm || 0)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-slate-600">
+                     <td className="px-4 py-3 text-right font-semibold text-indigo-600">
+                       {formatCurrency(record.loanAppForm || 0)}
+                     </td>
+                     <td className="px-4 py-3 text-right font-semibold text-violet-600">
+                       {formatCurrency(record.insuranceFee || 0)}
+                     </td>
+                     <td className="px-4 py-3 text-right text-slate-600">
                       {record.disbursedAt
                         ? new Date(record.disbursedAt).toLocaleDateString()
                         : "—"}

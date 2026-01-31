@@ -73,6 +73,7 @@ const BREAKDOWN_COLUMNS = [
   { key: "totalDisbursed", label: "Total Amount Disbursed", format: "currency" },
   { key: "totalInterest", label: "Total Interest", format: "currency" },
   { key: "totalLoanAppForm", label: "Card & Others", format: "currency" },
+  { key: "totalInsurance", label: "Insurance", format: "currency" },
   { key: "totalExpenses", label: "Total Expenses", format: "currency" },
   { key: "totalProfit", label: "Total Profit", format: "currency" },
   { key: "loanBalance", label: "Loan Balance", format: "currency" },
@@ -275,11 +276,12 @@ export default function CsoReportDetails() {
   const overshootValue = safeNumber(activeCso?.overshootValue);
   const tenBones = safeNumber(activeCso?.tenBones);
   const totalLoanAppForm = safeNumber(activeCso?.totalLoanAppForm);
+  const totalInsurance = safeNumber(activeCso?.totalInsurance);
   const totalExpenses = safeNumber(activeCso?.totalExpenses);
   const totalProfit =
     activeCso && activeCso.totalProfit !== undefined && activeCso.totalProfit !== null
       ? safeNumber(activeCso.totalProfit)
-      : safeNumber(totalInterest + totalLoanAppForm - totalExpenses);
+      : safeNumber(totalInterest + totalLoanAppForm + totalInsurance - totalExpenses);
   const loanBalance =
     activeCso && activeCso.loanBalance !== undefined && activeCso.loanBalance !== null
       ? safeNumber(activeCso.loanBalance)
@@ -288,7 +290,7 @@ export default function CsoReportDetails() {
     activeCso && activeCso.profitability !== undefined && activeCso.profitability !== null
       ? safeNumber(activeCso.profitability)
       : (() => {
-          const profitBase = totalInterest + totalLoanAppForm;
+          const profitBase = totalInterest + totalLoanAppForm + totalInsurance;
           if (profitBase <= 0) {
             return 0;
           }
@@ -316,6 +318,7 @@ export default function CsoReportDetails() {
     totalDisbursed,
     totalInterest,
     totalLoanAppForm,
+    totalInsurance,
     totalExpenses,
     totalProfit,
     loanBalance,
@@ -642,7 +645,7 @@ export default function CsoReportDetails() {
         </div>
 
         <p className="mt-3 text-xs text-slate-500">
-          Profit = Total Interest + Card & Others − Total Expenses.
+          Profit = Total Interest + Card & Others + Insurance − Total Expenses.
         </p>
       </section>
 

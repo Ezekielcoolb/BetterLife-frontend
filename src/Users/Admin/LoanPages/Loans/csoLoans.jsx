@@ -245,6 +245,7 @@ export default function CsoLoans() {
                   <th className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">Actual Paid</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">Loan Balance</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">Admin Fee</th>
+                  <th className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">Loan App Form</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">Loan Target</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">Disbursement Target</th>
                   <th className="px-4 py-3 text-center font-semibold text-slate-900 whitespace-nowrap">Status</th>

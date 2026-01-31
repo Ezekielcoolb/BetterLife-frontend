@@ -195,7 +195,8 @@ export default function CsoCollection() {
   const displayDate = collectionDate || selectedDate;
   const totalCollectionValue =
     (collectionSummary.totalPaidToday || 0) +
-    (formCollectionSummary.totalLoanAppForm || 0);
+    (formCollectionSummary.totalLoanAppForm || 0) +
+    (formCollectionSummary.totalInsuranceFee || 0);
   const totalCollectionForDay = formatCurrency(totalCollectionValue);
 
   const getTodayRemittanceStatus = () => {
@@ -352,7 +353,8 @@ export default function CsoCollection() {
 
         const derivedAmountCollected =
           Number(collectionSummary.totalPaidToday || 0) +
-          Number(formSummary.totalLoanAppForm || 0);
+          Number(formSummary.totalLoanAppForm || 0) +
+          Number(formSummary.totalInsuranceFee || 0);
 
         if (derivedAmountCollected > amountCollected) {
           amountCollected = derivedAmountCollected;
@@ -781,7 +783,7 @@ export default function CsoCollection() {
             <p className="text-lg font-semibold text-slate-900">{displayDate}</p>
           </div>
 
-          <dl className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+          <dl className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
             <div className="rounded-2xl bg-slate-50 px-4 py-3">
               <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">Customers</dt>
               <dd className="text-lg font-semibold text-slate-900">{collectionSummary.totalCustomers || 0}</dd>
@@ -801,6 +803,10 @@ export default function CsoCollection() {
             <div className="rounded-2xl bg-slate-50 px-4 py-3">
               <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">Forms collected</dt>
               <dd className="text-lg font-semibold text-indigo-600">{formatCurrency(formCollectionSummary.totalLoanAppForm || 0)}</dd>
+            </div>
+            <div className="rounded-2xl bg-slate-50 px-4 py-3">
+              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">Insurance collected</dt>
+              <dd className="text-lg font-semibold text-indigo-600">{formatCurrency(formCollectionSummary.totalInsuranceFee || 0)}</dd>
             </div>
             <div className="rounded-2xl bg-indigo-50 px-4 py-3">
               <dt className="text-xs font-semibold uppercase tracking-wide text-indigo-400">Total collection</dt>
@@ -937,8 +943,13 @@ export default function CsoCollection() {
             <h2 className="text-lg font-semibold text-slate-900">Daily Form Collections</h2>
             <p className="text-sm text-slate-500">Customers whose forms were collected on {displayDate}.</p>
           </div>
-          <div className="text-sm text-slate-500">
-            Total forms collected: <span className="font-semibold text-indigo-600">{formatCurrency(formCollectionSummary.totalLoanAppForm || 0)}</span>
+          <div className="flex flex-col items-start text-sm text-slate-500 sm:items-end">
+            <span>
+              Total forms collected: <span className="font-semibold text-indigo-600">{formatCurrency(formCollectionSummary.totalLoanAppForm || 0)}</span>
+            </span>
+            <span>
+              Total insurance collected: <span className="font-semibold text-indigo-600">{formatCurrency(formCollectionSummary.totalInsuranceFee || 0)}</span>
+            </span>
           </div>
         </div>
 
@@ -948,12 +959,13 @@ export default function CsoCollection() {
               <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <th className="px-4 py-3">Customer</th>
                 <th className="px-4 py-3 text-right">Form amount</th>
+                <th className="px-4 py-3 text-right">Insurance</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {formCollectionLoading && (
                 <tr>
-                  <td colSpan={2} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={3} className="px-4 py-8 text-center text-slate-500">
                     <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600">
                       <Loader2 className="h-4 w-4 animate-spin text-indigo-500" /> Loading form collection...
                     </div>
@@ -963,7 +975,7 @@ export default function CsoCollection() {
 
               {!formCollectionLoading && filteredFormRecords.length === 0 && (
                 <tr>
-                  <td colSpan={2} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={3} className="px-4 py-8 text-center text-slate-500">
                     No form collections recorded for this day.
                   </td>
                 </tr>
@@ -977,6 +989,7 @@ export default function CsoCollection() {
                       <p className="text-xs text-slate-500">{record.loanId}</p>
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-slate-900">{formatCurrency(record.loanAppForm || 0)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-slate-900">{formatCurrency(record.insuranceFee || 0)}</td>
                   </tr>
                 ))}
             </tbody>

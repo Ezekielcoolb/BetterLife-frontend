@@ -20,7 +20,7 @@ function navItems() {
     { label: "Loans", to: "/cso/all-loans", icon: ClipboardList },
     { label: "Collections", to: "/cso/collections", icon: Wallet },
     { label: "Dashboard", to: "/cso/dashboard", icon: LayoutDashboard },
-    // { label: "Wallet", to: "/cso/wallet", icon: PieChart },
+    { label: "Wallet", to: "/cso/wallet", icon: PieChart },
     { label: "Profile", to: "/cso/profile", icon: User },
   ];
 }

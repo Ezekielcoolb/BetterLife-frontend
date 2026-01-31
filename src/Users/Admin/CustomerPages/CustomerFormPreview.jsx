@@ -450,7 +450,7 @@ function DownloadTemplate({ record, formatDateTime, formatCurrency, assetBaseUrl
                     <img
                       src={`${assetBaseUrl}${item.url}`}
                       alt={item.label}
-                      crossOrigin="anonymous"
+                      // crossOrigin="anonymous"
                       style={{ width: "100%", height: "180px", objectFit: "cover", borderRadius: "8px" }}
                     />
                   ) : (
@@ -508,7 +508,7 @@ function DownloadTemplate({ record, formatDateTime, formatCurrency, assetBaseUrl
                   <img
                     src={`${assetBaseUrl}${sign.url}`}
                     alt={sign.label}
-                    crossOrigin="anonymous"
+                    // crossOrigin="anonymous"
                     style={{ height: "60px", objectFit: "contain", margin: "0 auto" }}
                   />
                 ) : (

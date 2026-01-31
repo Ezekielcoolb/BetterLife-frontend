@@ -299,7 +299,7 @@ export default function CustomerDetails() {
                       src={`${URL}${url}`} 
                       alt={label} 
                       className="h-48 w-full object-cover" 
-                      crossOrigin="anonymous" 
+                      // crossOrigin="anonymous" 
                     />
                   </a>
                 </div>
